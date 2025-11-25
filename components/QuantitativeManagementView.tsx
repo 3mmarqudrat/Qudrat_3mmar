@@ -1,4 +1,3 @@
-
 // ... (keeping existing imports)
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon } from './Icons';
@@ -153,9 +152,9 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                 setReferenceFile(file);
                 const arrayBuffer = await file.arrayBuffer();
                 
-                // FIX: Pass data as object property to ensure compatibility
+                // FIX: Pass data as Uint8Array to ensure compatibility with pdfjs-dist worker
                 const loadingTask = pdfjsLib.getDocument({
-                    data: arrayBuffer,
+                    data: new Uint8Array(arrayBuffer),
                     cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
                     cMapPacked: true,
                 });
