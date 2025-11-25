@@ -1,5 +1,3 @@
-
-
 // ... (keeping existing imports)
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Test, Section, Question, TestAttempt, Folder, VerbalTests, VERBAL_BANKS, VERBAL_CATEGORIES, FolderQuestion } from '../types';
@@ -308,17 +306,25 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
   // 4. DELETE TEST
   const deleteTest = async (section: Section, testId: string, bankKey?: string, categoryKey?: string) => {
     try {
-        // 1. Delete all subcollection questions first
+        // 1. Get all subcollection questions first
         const qColl = collection(db, 'globalTests', testId, 'questions');
         const qSnap = await getDocs(qColl);
         
-        const batch = writeBatch(db);
-        qSnap.docs.forEach(d => batch.delete(d.ref));
+        // 2. Batch delete questions (handling limit of 500)
+        const BATCH_SIZE = 500;
+        const chunks = [];
+        for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
+            chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
+        }
+
+        for (const chunk of chunks) {
+            const batch = writeBatch(db);
+            chunk.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
         
-        // 2. Delete test document
-        batch.delete(doc(db, 'globalTests', testId));
-        
-        await batch.commit();
+        // 3. Delete test document
+        await deleteDoc(doc(db, 'globalTests', testId));
     } catch(e) {
         console.error("Delete Test Failed:", e);
         throw e;
@@ -328,20 +334,27 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
   // 5. BULK DELETE TESTS
   const deleteTests = async (section: Section, testIds: string[]) => {
       try {
-          const batch = writeBatch(db);
-          
-          // Note: Firestore Batch limit is 500 operations. 
-          // If deleting many tests with many questions, this might overflow.
-          // For now, assuming reasonable usage.
-          
           for (const testId of testIds) {
+             // 1. Get all questions
              const qColl = collection(db, 'globalTests', testId, 'questions');
              const qSnap = await getDocs(qColl);
-             qSnap.docs.forEach(d => batch.delete(d.ref));
-             batch.delete(doc(db, 'globalTests', testId));
-          }
 
-          await batch.commit();
+             // 2. Batch delete questions (limit 500)
+             const BATCH_SIZE = 500;
+             const chunks = [];
+             for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
+                 chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
+             }
+
+             for (const chunk of chunks) {
+                 const batch = writeBatch(db);
+                 chunk.forEach(doc => batch.delete(doc.ref));
+                 await batch.commit();
+             }
+             
+             // 3. Delete the test document
+             await deleteDoc(doc(db, 'globalTests', testId));
+          }
       } catch (e) {
           console.error("Bulk Delete Failed:", e);
           throw e; 
