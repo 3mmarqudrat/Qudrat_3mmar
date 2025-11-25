@@ -2,10 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon } from './Icons';
 import { Question, Test, AppData, Section } from '../types';
-import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+declare const pdfjsLib: any;
 
 interface QuantitativeManagementViewProps {
     onBack: () => void;
@@ -155,7 +153,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                 // FIX: Pass data as Uint8Array to ensure compatibility with pdfjs-dist worker
                 const loadingTask = pdfjsLib.getDocument({
                     data: new Uint8Array(arrayBuffer),
-                    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
+                    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
                     cMapPacked: true,
                 });
 
@@ -169,7 +167,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
                 if (context) {
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    await page.render({ canvasContext: context, viewport: viewport } as any).promise;
                     setReferenceImage(canvas.toDataURL('image/jpeg'));
                 }
             } catch (error: any) {

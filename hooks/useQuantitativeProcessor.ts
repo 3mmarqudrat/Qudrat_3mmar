@@ -1,13 +1,8 @@
 // ... (keeping existing imports)
 import { useState, useRef, useEffect, useCallback } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
 import { Question, Section } from '../types';
 
-// Configure PDF.js worker
-// Fixed: Use version 4.0.379 to match importmap
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
-
-// Declare Tesseract globally
+declare const pdfjsLib: any;
 declare const Tesseract: any;
 
 interface CropBox {
@@ -237,10 +232,10 @@ export const useQuantitativeProcessor = (
             const file = pendingItem.file;
             const arrayBuffer = await file.arrayBuffer();
             
-            // FIX: Pass data as Uint8Array to ensure compatibility with pdfjs-dist worker
+            // FIX: Use global pdfjsLib
             const loadingTask = pdfjsLib.getDocument({
                 data: new Uint8Array(arrayBuffer),
-                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
+                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
                 cMapPacked: true,
             });
             

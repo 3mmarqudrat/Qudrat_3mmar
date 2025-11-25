@@ -10,6 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
     <!-- Add Tesseract.js for OCR -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <!-- Add PDF.js -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <script>
+        // Configure PDF.js worker immediately
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    </script>
     <style>
       :root {
         /* New Modern Theme */
@@ -72,8 +78,6 @@
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
     "process": "https://aistudiocdn.com/process@^0.11.10",
-    "pdfjs-dist": "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm",
-    "pdfjs-dist/": "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/",
     "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
   }
 }

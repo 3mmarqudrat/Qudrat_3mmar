@@ -1,12 +1,10 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-// Fix: Explicitly import 'process' to make Node.js types available for 'process.cwd()'
-// and resolve errors about missing 'node' type definitions.
-import process from 'process';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  // Fix: Cast process to any to avoid TypeScript error 'Property cwd does not exist on type Process'
+  const env = loadEnv(mode, (process as any).cwd(), '');
   return {
     plugins: [react()],
     define: {
