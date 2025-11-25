@@ -311,8 +311,9 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
         const qColl = collection(db, 'globalTests', testId, 'questions');
         const qSnap = await getDocs(qColl);
         
-        // 2. Batch delete questions (handling limit of 20 to safe-guard against large image payloads)
-        const BATCH_SIZE = 20;
+        // 2. Batch delete questions 
+        // CRITICAL: Reduced to 3 to handle large Base64 image payloads safely within 10MB limit
+        const BATCH_SIZE = 3;
         const chunks = [];
         for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
             chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
@@ -340,8 +341,9 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
              const qColl = collection(db, 'globalTests', testId, 'questions');
              const qSnap = await getDocs(qColl);
 
-             // 2. Batch delete questions (Reduced to 20 to prevent Transaction Too Big errors with Base64 images)
-             const BATCH_SIZE = 20;
+             // 2. Batch delete questions
+             // CRITICAL: Reduced to 3 to handle large Base64 image payloads safely within 10MB limit
+             const BATCH_SIZE = 3;
              const chunks = [];
              for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
                  chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
