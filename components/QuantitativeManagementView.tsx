@@ -1,5 +1,4 @@
 
-
 // ... (keeping existing imports)
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon, PenIcon } from './Icons';
@@ -464,7 +463,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
             <div className="flex flex-row h-[calc(100vh-80px)] overflow-hidden">
                 <aside className="w-1/4 p-4 border-l border-border overflow-y-auto bg-surface/30 hidden md:block">
                     <div className="mb-4 flex justify-between items-center">
-                         <h3 className="font-bold text-text-muted">الاختبارات الحالية</h3>
+                         <h3 className="font-bold text-text-muted">الاختبارات الحالية ({sortedTests.length})</h3>
                          {/* Selection Controls */}
                          <div className="flex items-center gap-2">
                             <button 

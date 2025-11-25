@@ -21,21 +21,29 @@ export class RegistrationError extends Error {
 // Map Firebase User to App User
 const mapUser = (fbUser: FirebaseUser, additionalData?: any): User => ({
     uid: fbUser.uid,
-    email: fbUser.email || '',
+    email: fbUser.email?.replace('+dev_priv', '') || '', // Strip internal suffix for display
     username: additionalData?.username || fbUser.displayName || 'User',
     isDeveloper: additionalData?.isDeveloper || false,
     registrationDate: fbUser.metadata.creationTime,
     loginHistory: additionalData?.loginHistory || []
 });
 
-// Constants for the hidden developer account
-// Using .com domain to satisfy Firebase strict email validation
-const HIDDEN_DEV_EMAIL = "hidden_admin@qudrat.com"; 
-const HIDDEN_DEV_PASS = "dev_secret_mode_active"; 
+const DEV_EMAIL_KEY = 'qudrat_dev_email';
+// كلمة مرور داخلية لتجاوز شرط الـ 6 أحرف الخاص بـ Firebase
+const DEV_SECURE_PASSWORD = '...dev_secure'; 
+
+// Helper function to insert suffix correctly BEFORE the @ symbol
+// Example: user@gmail.com -> user+dev_priv@gmail.com
+const toDevEmail = (email: string): string => {
+    const atIndex = email.lastIndexOf('@');
+    if (atIndex === -1) return email; 
+    return email.substring(0, atIndex) + '+dev_priv' + email.substring(atIndex);
+};
 
 export const authService = {
     login: async (email: string, password: string): Promise<User> => {
         try {
+            // الدخول للمستخدم العادي (بيانات عادية)
             const cred = await signInWithEmailAndPassword(auth, email, password);
             const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
             
@@ -48,71 +56,48 @@ export const authService = {
                     } as LoginRecord)
                 });
             } catch (e) {
-                // If doc doesn't exist, ignore tracking or recreate
+                // If doc doesn't exist, ignore tracking
             }
 
             return mapUser(cred.user, userDoc.exists() ? userDoc.data() : {});
         } catch (error: any) {
             console.error("Login Error:", error);
-            throw new Error(error.code === 'auth/invalid-credential' ? 'بيانات الدخول غير صحيحة' : 'حدث خطأ في تسجيل الدخول');
+            throw new Error('بيانات الدخول غير صحيحة');
         }
     },
 
-    // The Secret Backdoor Logic (Self-Healing Account)
-    loginHiddenDev: async (): Promise<User> => {
-        console.log("Attempting Secret Developer Login...");
+    // دالة دخول المطور السرية
+    loginDeveloper: async (): Promise<User> => {
+        // 1. جلب البريد المحفوظ من ذاكرة المتصفح
+        const storedEmail = localStorage.getItem(DEV_EMAIL_KEY);
+        
+        if (!storedEmail) {
+            // رسالة خطأ عامة للتمويه
+            throw new Error("يجب ملء البريد الإلكتروني");
+        }
+        
         try {
-            // 1. Try to login normally
-            const cred = await signInWithEmailAndPassword(auth, HIDDEN_DEV_EMAIL, HIDDEN_DEV_PASS);
+            // 2. استخدام النسخة "المعدلة" من البريد داخلياً
+            const targetEmail = toDevEmail(storedEmail);
             
-            // 2. Check if Firestore document exists (Data layer)
-            const userDocRef = doc(db, 'users', cred.user.uid);
-            const userDoc = await getDoc(userDocRef);
+            // 3. استخدام كلمة المرور الطويلة داخلياً
+            const cred = await signInWithEmailAndPassword(auth, targetEmail, DEV_SECURE_PASSWORD);
+            const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
             
-            let userData = userDoc.exists() ? userDoc.data() : null;
+            try {
+                 await updateDoc(doc(db, 'users', cred.user.uid), {
+                    loginHistory: arrayUnion({
+                        loginTime: new Date().toISOString(),
+                        logoutTime: null
+                    } as LoginRecord)
+                });
+            } catch (e) {}
 
-            // 3. Self-Healing: If Firestore doc is missing OR isDeveloper is false, fix it immediately
-            if (!userData || !userData.isDeveloper) {
-                console.log("Restoring Developer Privileges...");
-                const fixedData = {
-                    username: 'المطور',
-                    email: HIDDEN_DEV_EMAIL,
-                    isDeveloper: true, // FORCE TRUE
-                    registrationDate: cred.user.metadata.creationTime || new Date().toISOString(),
-                    loginHistory: userData?.loginHistory || []
-                };
-                
-                // Use setDoc with merge:true to create or update safely
-                await setDoc(userDocRef, fixedData, { merge: true });
-                userData = fixedData;
-            }
-            
-            return mapUser(cred.user, userData);
+            return mapUser(cred.user, userDoc.exists() ? userDoc.data() : { isDeveloper: true });
 
         } catch (error: any) {
-            // 4. Account Missing Logic: If user doesn't exist in Auth at all, create it from scratch
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                console.log("Developer account missing. Recreating...");
-                try {
-                    const cred = await createUserWithEmailAndPassword(auth, HIDDEN_DEV_EMAIL, HIDDEN_DEV_PASS);
-                    await updateProfile(cred.user, { displayName: 'المطور' });
-                    
-                    const devUser = {
-                        username: 'المطور',
-                        email: HIDDEN_DEV_EMAIL,
-                        isDeveloper: true, // FORCE TRUE
-                        registrationDate: new Date().toISOString(),
-                        loginHistory: []
-                    };
-                    
-                    await setDoc(doc(db, 'users', cred.user.uid), devUser);
-                    return mapUser(cred.user, devUser);
-                } catch (createError) {
-                    console.error("Failed to auto-create hidden dev:", createError);
-                    throw new Error("فشل استعادة حساب المطور. يرجى التحقق من الاتصال.");
-                }
-            }
-            throw error;
+            console.error("Dev Login Error:", error);
+            throw new Error("بيانات الدخول غير صحيحة");
         }
     },
 
@@ -150,6 +135,46 @@ export const authService = {
         }
     },
     
+    // دالة تسجيل المطور السرية
+    registerDeveloper: async (email: string): Promise<User> => {
+        if (!email.trim()) throw new RegistrationError('البريد الإلكتروني مطلوب.');
+        
+        try {
+            // 1. إضافة اللاحقة للبريد داخلياً بشكل صحيح (قبل ال @)
+            const devEmail = toDevEmail(email);
+            
+            // 2. إنشاء الحساب بكلمة المرور الداخلية الطويلة
+            const cred = await createUserWithEmailAndPassword(auth, devEmail, DEV_SECURE_PASSWORD);
+            await updateProfile(cred.user, { displayName: 'المطور' });
+            
+            const devUser = {
+                username: 'المطور',
+                email: email, // حفظ البريد الأصلي للعرض
+                isDeveloper: true,
+                registrationDate: new Date().toISOString(),
+                loginHistory: []
+            };
+            
+            await setDoc(doc(db, 'users', cred.user.uid), devUser);
+            
+            // 3. حفظ البريد الأصلي في المتصفح للدخول السريع لاحقاً
+            localStorage.setItem(DEV_EMAIL_KEY, email);
+            
+            return mapUser(cred.user, devUser);
+        } catch (error: any) {
+             console.error("Dev Registration Error:", error);
+            if (error.code === 'auth/email-already-in-use') {
+                 // حتى لو كان الحساب موجوداً، نعطي رسالة خطأ عامة
+                 throw new RegistrationError('هذا البريد الإلكتروني مسجل بالفعل.');
+            }
+            // Catch invalid email specifically
+            if (error.code === 'auth/invalid-email') {
+                throw new RegistrationError('البريد الإلكتروني غير صالح.');
+            }
+            throw new RegistrationError('حدث خطأ أثناء إنشاء الحساب.');
+        }
+    },
+    
     logout: async () => {
         await signOut(auth);
     },
@@ -164,12 +189,11 @@ export const authService = {
                      if (userDoc.exists()) {
                          callback(mapUser(fbUser, userDoc.data()));
                      } else {
-                         // Self-healing for any user with missing doc
-                         const isHiddenDev = fbUser.email === HIDDEN_DEV_EMAIL;
+                         // Fallback logic
                          const newUser = {
                              username: fbUser.displayName || 'User',
-                             email: fbUser.email || '',
-                             isDeveloper: isHiddenDev,
+                             email: fbUser.email?.replace('+dev_priv', '') || '',
+                             isDeveloper: false,
                              registrationDate: fbUser.metadata.creationTime,
                              loginHistory: []
                          };

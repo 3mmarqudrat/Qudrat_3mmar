@@ -63,7 +63,7 @@ export const useQuantitativeProcessor = (
                     data[i + 2] = val;
                 }
                 ctx.putImageData(imageData, 0, 0);
-                resolve(canvas.toDataURL('image/jpeg', 0.9)); // Slightly lower quality for speed
+                resolve(canvas.toDataURL('image/jpeg', 0.8)); // Slightly lower quality for speed
             };
             img.onerror = () => resolve(imageSrc);
         });
@@ -171,15 +171,16 @@ export const useQuantitativeProcessor = (
             qCanvas.height = config.questionBox.height;
             qCanvas.getContext('2d')!.putImageData(qData, 0, 0);
             
-            // Optimization: Reduce quality to 0.5 to keep document size manageable in Firestore
-            const questionImage = qCanvas.toDataURL('image/jpeg', 0.5);
+            // Optimization: Reduce quality to 0.4 to speed up uploads and processing
+            const questionImage = qCanvas.toDataURL('image/jpeg', 0.4);
 
             const aData = ctx.getImageData(config.answerBox.x, config.answerBox.y, config.answerBox.width, config.answerBox.height);
             const aCanvas = document.createElement('canvas');
             aCanvas.width = config.answerBox.width;
             aCanvas.height = config.answerBox.height;
             aCanvas.getContext('2d')!.putImageData(aData, 0, 0);
-            const answerImage = aCanvas.toDataURL('image/jpeg', 0.5);
+            // Optimization: Reduce quality
+            const answerImage = aCanvas.toDataURL('image/jpeg', 0.4);
 
             let detectedAnswer = await detectAnswerFromPdfText(page, config.answerBox);
             if (!detectedAnswer) {
@@ -250,8 +251,8 @@ export const useQuantitativeProcessor = (
             let processedCount = 0;
             const questionsToAdd: Omit<Question, 'id'>[] = [];
             
-            // Reduced CONCURRENCY to prevent freezing on large batches
-            const CONCURRENCY = 3; 
+            // SPEED OPTIMIZATION: Increased concurrency to 5
+            const CONCURRENCY = 5; 
             
             for (let i = 0; i < pageIndices.length; i += CONCURRENCY) {
                 const chunk = pageIndices.slice(i, i + CONCURRENCY);

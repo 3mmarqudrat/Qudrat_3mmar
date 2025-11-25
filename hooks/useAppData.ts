@@ -311,19 +311,20 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
         const qColl = collection(db, 'globalTests', testId, 'questions');
         const qSnap = await getDocs(qColl);
         
-        // 2. Batch delete questions 
-        // CRITICAL: Reduced to 3 to handle large Base64 image payloads safely within 10MB limit
-        const BATCH_SIZE = 3;
-        const chunks = [];
-        for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
-            chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
-        }
+        // 2. Batch delete questions (Optimized)
+        // BATCH_SIZE increased to 15 for better speed as image quality was reduced
+        const BATCH_SIZE = 15;
+        const batchPromises = [];
 
-        for (const chunk of chunks) {
+        for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
+            const chunk = qSnap.docs.slice(i, i + BATCH_SIZE);
             const batch = writeBatch(db);
             chunk.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
+            batchPromises.push(batch.commit());
         }
+
+        // Execute all batches in parallel
+        await Promise.all(batchPromises);
         
         // 3. Delete test document
         await deleteDoc(doc(db, 'globalTests', testId));
@@ -341,19 +342,19 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
              const qColl = collection(db, 'globalTests', testId, 'questions');
              const qSnap = await getDocs(qColl);
 
-             // 2. Batch delete questions
-             // CRITICAL: Reduced to 3 to handle large Base64 image payloads safely within 10MB limit
-             const BATCH_SIZE = 3;
-             const chunks = [];
+             // 2. Batch delete questions (Optimized)
+             const BATCH_SIZE = 15;
+             const batchPromises = [];
+             
              for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
-                 chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
-             }
-
-             for (const chunk of chunks) {
+                 const chunk = qSnap.docs.slice(i, i + BATCH_SIZE);
                  const batch = writeBatch(db);
                  chunk.forEach(doc => batch.delete(doc.ref));
-                 await batch.commit();
+                 batchPromises.push(batch.commit());
              }
+
+             // Execute batches in parallel for this test
+             await Promise.all(batchPromises);
              
              // 3. Delete the test document
              await deleteDoc(doc(db, 'globalTests', testId));
