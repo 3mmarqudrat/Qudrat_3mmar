@@ -15,12 +15,12 @@ interface QuantitativeManagementViewProps {
     onUpdateQuestionAnswer: (section: Section, testId: string, questionId: string, newAnswer: string, bankKey?: string, categoryKey?: string) => void;
     onDeleteTests: (section: Section, testIds: string[]) => Promise<void>;
 
-    // New Props for Global Processing
-    processorQueue: any[]; // Typing as any to avoid import circles, but ideally ProcessItem[]
+    processorQueue: any[]; 
     isProcessorWorking: boolean;
     onAddFilesToQueue: (files: File[], config: any) => void;
     onClearCompleted: () => void;
-    onStopProcessing: () => void; // New Prop for stopping
+    onStopProcessing: () => void; 
+    onSelectTest?: (testId: string) => void; // New prop for on-demand fetch
 }
 
 interface CropBox {
@@ -45,7 +45,8 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
     isProcessorWorking,
     onAddFilesToQueue,
     onClearCompleted,
-    onStopProcessing
+    onStopProcessing,
+    onSelectTest
 }) => {
     
     // Persistent Config State
@@ -84,6 +85,18 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
     const selectedTest = useMemo(() => {
         return data.tests.quantitative.find(t => t.id === selectedTestId) || null;
     }, [data.tests.quantitative, selectedTestId]);
+
+    // Trigger fetch on selection
+    useEffect(() => {
+        if (selectedTestId && onSelectTest) {
+            onSelectTest(selectedTestId);
+        }
+    }, [selectedTestId, onSelectTest]);
+
+
+    // ... (rest of the component logic remains exactly the same as before, just ensuring imports are correct) ...
+    // To save output size, I will only include the changed parts if possible, but the prompt requires full content.
+    // I will output the full content to be safe and strictly follow instructions.
 
     // --- Persistence ---
     const saveCropConfig = (config: typeof cropConfig) => {
@@ -496,8 +509,11 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                     <div className="space-y-2">
                         {sortedTests.length > 0 ? (
                             sortedTests.map(test => {
-                                const unclearInList = test.questions.filter(q => q.correctAnswer === '?').length;
-                                const editedInList = test.questions.filter(q => q.isEdited).length;
+                                // Important: We are accessing test.questions here for Sidebar counts.
+                                // If questions are not loaded, this will be 0. This is expected behavior for performance.
+                                // The user will see counts when they select the test.
+                                const unclearInList = test.questions ? test.questions.filter(q => q.correctAnswer === '?').length : 0;
+                                const editedInList = test.questions ? test.questions.filter(q => q.isEdited).length : 0;
                                 return (
                                     <div 
                                         key={test.id} 
@@ -567,7 +583,14 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                     بدء الاختبار
                                 </button>
                             </div>
-
+                            
+                            {/* Wait for questions to load */}
+                            {selectedTest.questions.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                                    <p className="text-text-muted">جارٍ تحميل الأسئلة...</p>
+                                </div>
+                            ) : (
                             <div className="space-y-4">
                                 {selectedTest.questions.map((q, idx) => (
                                     <div key={idx} className={`bg-surface p-4 rounded-lg border ${q.correctAnswer === '?' ? 'border-red-500' : q.isEdited ? 'border-sky-500/50' : 'border-border'}`}>
@@ -620,6 +643,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                     </div>
                                 ))}
                             </div>
+                            )}
                         </div>
                     ) : (
                         <div className="max-w-2xl w-full space-y-8 pt-12">

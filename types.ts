@@ -5,6 +5,7 @@ export type Section = 'quantitative' | 'verbal';
 export interface LoginRecord {
   loginTime: string;
   logoutTime: string | null;
+  lastActive?: string; // Timestamp of the last heartbeat/activity
 }
 
 // Fix: Add and export the User interface for authentication.
@@ -52,6 +53,7 @@ export interface Test {
   name: string;
   questions: Question[];
   sourceText?: string;
+  section?: Section;
 }
 
 export interface FolderQuestion extends Question {
