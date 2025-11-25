@@ -1,3 +1,4 @@
+
 // ... (keeping existing imports)
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Question, Section } from '../types';
@@ -258,8 +259,14 @@ export const useQuantitativeProcessor = (
                     chunk.map(pageIndex => processSinglePage(pdf, pageIndex, currentConfig))
                 );
 
-                results.forEach(res => {
-                    if (res) questionsToAdd.push(res);
+                // Add order index to results
+                results.forEach((res, idx) => {
+                    if (res) {
+                        questionsToAdd.push({
+                            ...res,
+                            order: processedCount + idx // Assign persistent order
+                        });
+                    }
                 });
 
                 processedCount += chunk.length;

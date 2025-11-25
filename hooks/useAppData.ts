@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Test, Section, Question, TestAttempt, Folder, VerbalTests, VERBAL_BANKS, VERBAL_CATEGORIES, FolderQuestion } from '../types';
 import { AppSettings } from '../services/settingsService'; 
 import { db } from '../services/firebase';
-import { doc, getDoc, setDoc, onSnapshot, deleteDoc, updateDoc, collection, query, writeBatch, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, deleteDoc, updateDoc, collection, query, writeBatch, arrayUnion, collectionGroup, getDocs } from 'firebase/firestore';
 
 const initialVerbalTests: VerbalTests = Object.keys(VERBAL_BANKS).reduce((acc, bankKey) => {
   acc[bankKey] = Object.keys(VERBAL_CATEGORIES).reduce((catAcc, catKey) => {
@@ -44,6 +44,9 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     quantitative: [],
     verbal: initialVerbalTests,
   });
+
+  // New State: Questions from subcollections
+  const [subcollectionQuestions, setSubcollectionQuestions] = useState<Record<string, Question[]>>({});
   
   // 2. Global Settings
   const [settings, setSettings] = useState<AppSettings>(defaultGlobalSettings);
@@ -86,6 +89,31 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // LOAD SUBCOLLECTION QUESTIONS (Real-time Collection Group Listener)
+  useEffect(() => {
+      const q = query(collectionGroup(db, 'questions'));
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const grouped: Record<string, Question[]> = {};
+          
+          querySnapshot.forEach((doc) => {
+              // The parent of a question document is the 'questions' collection, 
+              // and the parent of that is the Test document.
+              const testId = doc.ref.parent.parent?.id;
+              
+              if (testId) {
+                  if (!grouped[testId]) grouped[testId] = [];
+                  grouped[testId].push({ id: doc.id, ...doc.data() } as Question);
+              }
+          });
+          
+          setSubcollectionQuestions(grouped);
+      }, (error) => {
+          console.error("Error fetching subcollection questions:", error);
+      });
+
+      return () => unsubscribe();
   }, []);
 
   // Load Global Settings
@@ -134,10 +162,45 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     return () => unsubscribe();
   }, [userId]);
 
-  const data: AppData = useMemo(() => ({
-      tests: globalTests,
-      ...userData
-  }), [globalTests, userData]);
+  const data: AppData = useMemo(() => {
+      // Deep clone globalTests to avoid mutation
+      const mergedTests = JSON.parse(JSON.stringify(globalTests));
+      
+      // Helper function to merge questions
+      const mergeQuestionsForTest = (test: Test) => {
+          const extraQuestions = subcollectionQuestions[test.id] || [];
+          // Use a Map to deduplicate by ID if necessary, preferring subcollection if conflict (unlikely)
+          const qMap = new Map();
+          
+          (test.questions || []).forEach(q => qMap.set(q.id, q));
+          extraQuestions.forEach(q => qMap.set(q.id, q));
+          
+          test.questions = Array.from(qMap.values());
+          
+          // Sort by order field if available, fallback to index
+          test.questions.sort((a: Question, b: Question) => {
+             if (a.order !== undefined && b.order !== undefined) {
+                 return a.order - b.order;
+             }
+             return 0; 
+          });
+      };
+
+      // Merge Quantitative
+      mergedTests.quantitative.forEach((test: Test) => mergeQuestionsForTest(test));
+
+      // Merge Verbal
+      Object.keys(mergedTests.verbal).forEach(bank => {
+          Object.keys(mergedTests.verbal[bank]).forEach(cat => {
+              mergedTests.verbal[bank][cat].forEach((test: Test) => mergeQuestionsForTest(test));
+          });
+      });
+
+      return {
+          tests: mergedTests,
+          ...userData
+      };
+  }, [globalTests, userData, subcollectionQuestions]);
 
   // --- ACTIONS (Now using Collection-based logic) ---
 
@@ -172,7 +235,7 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     const newTest: any = {
       id: testId,
       name: testName,
-      questions: [],
+      questions: [], // Legacy array kept empty for new tests
       section,
       createdAt: new Date().toISOString()
     };
@@ -187,16 +250,25 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     return testId;
   };
 
-  // 2. ADD QUESTIONS (Updates specific Document)
-  const addQuestionsToTest = (section: Section, testId: string, newQuestions: Omit<Question, 'id'>[], bankKey?: string, categoryKey?: string) => {
+  // 2. ADD QUESTIONS (Updates specific Document or Subcollection)
+  const addQuestionsToTest = async (section: Section, testId: string, newQuestions: Omit<Question, 'id'>[], bankKey?: string, categoryKey?: string) => {
     if (!isDevUser) return;
     
-    const questionsWithIds = newQuestions.map(q => ({ ...q, id: `q_${Date.now()}_${Math.random()}` }));
-    
-    // Use arrayUnion to add efficiently without reading the whole doc
-    updateDoc(doc(db, 'globalTests', testId), {
-        questions: arrayUnion(...questionsWithIds)
-    }).catch(e => console.error("Add Questions Failed:", e));
+    try {
+        const batch = writeBatch(db);
+        const questionsRef = collection(db, 'globalTests', testId, 'questions');
+        
+        newQuestions.forEach(q => {
+             const newDocRef = doc(questionsRef); 
+             // Ensure ID and Order are set
+             batch.set(newDocRef, { ...q, id: newDocRef.id });
+        });
+        
+        await batch.commit();
+    } catch (e) {
+        console.error("Add Questions Failed:", e);
+        // Fallback or alert logic could go here
+    }
   };
   
   // 3. UPDATE ANSWER
@@ -204,14 +276,24 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
       if (!isDevUser) return;
       
       try {
+          // Determine if question is legacy (in array) or new (in subcollection)
           const testRef = doc(db, 'globalTests', testId);
           const testSnap = await getDoc(testRef);
+          
           if (testSnap.exists()) {
               const testData = testSnap.data();
-              const updatedQuestions = testData.questions.map((q: Question) => 
-                  q.id === questionId ? { ...q, correctAnswer: newAnswer } : q
-              );
-              await updateDoc(testRef, { questions: updatedQuestions });
+              const legacyIndex = testData.questions?.findIndex((q: Question) => q.id === questionId);
+              
+              if (legacyIndex !== undefined && legacyIndex > -1) {
+                  // Update Legacy Array
+                  const updatedQuestions = [...testData.questions];
+                  updatedQuestions[legacyIndex].correctAnswer = newAnswer;
+                  await updateDoc(testRef, { questions: updatedQuestions });
+              } else {
+                  // Update Subcollection Document
+                  const qRef = doc(db, 'globalTests', testId, 'questions', questionId);
+                  await updateDoc(qRef, { correctAnswer: newAnswer });
+              }
           }
       } catch (e) {
           console.error("Update Answer Failed:", e);
@@ -221,7 +303,17 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
   // 4. DELETE TEST
   const deleteTest = async (section: Section, testId: string, bankKey?: string, categoryKey?: string) => {
     try {
-        await deleteDoc(doc(db, 'globalTests', testId));
+        // 1. Delete all subcollection questions first
+        const qColl = collection(db, 'globalTests', testId, 'questions');
+        const qSnap = await getDocs(qColl);
+        
+        const batch = writeBatch(db);
+        qSnap.docs.forEach(d => batch.delete(d.ref));
+        
+        // 2. Delete test document
+        batch.delete(doc(db, 'globalTests', testId));
+        
+        await batch.commit();
     } catch(e) {
         console.error("Delete Test Failed:", e);
         throw e;
@@ -231,11 +323,23 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
   // 5. BULK DELETE TESTS
   const deleteTests = async (section: Section, testIds: string[]) => {
       try {
-          const promises = testIds.map(id => deleteDoc(doc(db, 'globalTests', id)));
-          await Promise.all(promises);
+          const batch = writeBatch(db);
+          
+          // Note: Firestore Batch limit is 500 operations. 
+          // If deleting many tests with many questions, this might overflow.
+          // For now, assuming reasonable usage.
+          
+          for (const testId of testIds) {
+             const qColl = collection(db, 'globalTests', testId, 'questions');
+             const qSnap = await getDocs(qColl);
+             qSnap.docs.forEach(d => batch.delete(d.ref));
+             batch.delete(doc(db, 'globalTests', testId));
+          }
+
+          await batch.commit();
       } catch (e) {
           console.error("Bulk Delete Failed:", e);
-          throw e; // Rethrow to let UI handle it
+          throw e; 
       }
   };
   

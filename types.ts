@@ -42,6 +42,7 @@ export interface Question {
   verificationImage?: string; // Image of the answer section for dev verification
   options: string[];
   correctAnswer: string;
+  order?: number; // Added for sorting preservation
 }
 
 export interface Test {

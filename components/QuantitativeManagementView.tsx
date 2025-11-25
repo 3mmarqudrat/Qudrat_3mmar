@@ -1,5 +1,6 @@
+
 // ... (keeping existing imports)
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon } from './Icons';
 import { Question, Test, AppData, Section } from '../types';
 
@@ -54,7 +55,8 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
     // View State
     const [viewMode, setViewMode] = useState<ViewMode>('upload');
     const [zoom, setZoom] = useState<number>(100); 
-    const [selectedTest, setSelectedTest] = useState<Test | null>(null);
+    // CHANGE: Store ID instead of object to keep reactivity with AppData updates
+    const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
     
     // Deletion State
     const [isDeleting, setIsDeleting] = useState(false);
@@ -75,6 +77,11 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null);
+
+    // --- Derived State ---
+    const selectedTest = useMemo(() => {
+        return data.tests.quantitative.find(t => t.id === selectedTestId) || null;
+    }, [data.tests.quantitative, selectedTestId]);
 
     // --- Persistence ---
     const saveCropConfig = (config: typeof cropConfig) => {
@@ -126,8 +133,8 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
             const idsToDelete = Array.from(selectedIds);
             
             // If the currently viewed test is being deleted, go back to upload mode
-            if (selectedTest && selectedIds.has(selectedTest.id)) {
-                setSelectedTest(null);
+            if (selectedTestId && selectedIds.has(selectedTestId)) {
+                setSelectedTestId(null);
                 setViewMode('upload');
             }
 
@@ -299,8 +306,8 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
         setStagedFiles([]); 
     };
 
-    const handleTestSelect = (test: Test) => {
-        setSelectedTest(test);
+    const handleTestSelect = (testId: string) => {
+        setSelectedTestId(testId);
         setViewMode('details');
     };
     
@@ -419,6 +426,9 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
         );
     }
 
+    // Determine how many questions are unclear (answer is '?')
+    const unclearCount = selectedTest ? selectedTest.questions.filter(q => q.correctAnswer === '?').length : 0;
+
     return (
         <div className="bg-bg min-h-screen flex flex-col">
             <header className="bg-surface/80 backdrop-blur-lg p-4 sticky top-0 z-20 border-b border-border">
@@ -432,7 +442,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                     <div className="flex gap-2">
                          {viewMode === 'details' && (
                              <button 
-                                onClick={() => { setSelectedTest(null); setViewMode('upload'); }} 
+                                onClick={() => { setSelectedTestId(null); setViewMode('upload'); }} 
                                 className="px-4 py-2 bg-zinc-700 text-slate-200 rounded-md hover:bg-zinc-600 transition-colors font-bold text-sm"
                             >
                                 + إضافة اختبار
@@ -475,26 +485,34 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                     </div>
                     <div className="space-y-2">
                         {sortedTests.length > 0 ? (
-                            sortedTests.map(test => (
-                                <div 
-                                    key={test.id} 
-                                    className={`bg-zinc-800 p-3 rounded-md text-sm flex items-center group transition-colors ${selectedTest?.id === test.id ? 'border border-primary' : ''} ${selectedIds.has(test.id) ? 'bg-zinc-700' : 'hover:bg-zinc-700'}`}
-                                >
-                                     {/* Checkbox */}
-                                     <input 
-                                        type="checkbox"
-                                        checked={selectedIds.has(test.id)}
-                                        onChange={() => toggleSelection(test.id)}
-                                        className="ml-3 h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-primary focus:ring-primary focus:ring-offset-zinc-800 cursor-pointer"
-                                     />
-                                     <div 
-                                        className="flex-grow flex items-center gap-2 overflow-hidden cursor-pointer"
-                                        onClick={() => handleTestSelect(test)}
-                                     >
-                                        <span className="truncate font-bold pl-1">{test.name}</span>
+                            sortedTests.map(test => {
+                                const unclearInList = test.questions.filter(q => q.correctAnswer === '?').length;
+                                return (
+                                    <div 
+                                        key={test.id} 
+                                        className={`bg-zinc-800 p-3 rounded-md text-sm flex items-center group transition-colors ${selectedTestId === test.id ? 'border border-primary' : ''} ${selectedIds.has(test.id) ? 'bg-zinc-700' : 'hover:bg-zinc-700'}`}
+                                    >
+                                         {/* Checkbox */}
+                                         <input 
+                                            type="checkbox"
+                                            checked={selectedIds.has(test.id)}
+                                            onChange={() => toggleSelection(test.id)}
+                                            className="ml-3 h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-primary focus:ring-primary focus:ring-offset-zinc-800 cursor-pointer"
+                                         />
+                                         <div 
+                                            className="flex-grow flex items-center justify-between gap-2 overflow-hidden cursor-pointer"
+                                            onClick={() => handleTestSelect(test.id)}
+                                         >
+                                            <span className="truncate font-bold pl-1">{test.name}</span>
+                                            {unclearInList > 0 && (
+                                                <span className="bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0" title={`${unclearInList} أسئلة غير واضحة`}>
+                                                    {unclearInList} ?
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         ) : (
                             <p className="text-xs text-text-muted">لا توجد اختبارات.</p>
                         )}
@@ -507,7 +525,14 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                             <div className="flex items-center justify-between bg-surface p-6 rounded-xl border border-border">
                                 <div>
                                     <h2 className="text-3xl font-bold text-primary">{selectedTest.name}</h2>
-                                    <p className="text-text-muted mt-1">{selectedTest.questions.length} سؤال</p>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <p className="text-text-muted">{selectedTest.questions.length} سؤال</p>
+                                        {unclearCount > 0 && (
+                                            <span className="text-sm font-bold text-red-400 bg-red-900/20 px-2 py-0.5 rounded border border-red-500/30">
+                                                ({unclearCount} سؤال بحاجة لتحديد الإجابة)
+                                            </span>
+                                        )}
+                                    </div>
                                     {selectedTest.sourceText && <p className="text-xs text-text-muted mt-2">{selectedTest.sourceText}</p>}
                                 </div>
                                 <button 
@@ -536,7 +561,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                                         : 'bg-green-900/30 border-green-500 text-green-300 focus:ring-green-500'
                                                     }`}
                                                 >
-                                                    <option value="?">غير واضحة</option>
+                                                    <option value="?">غير واضحة (?)</option>
                                                     <option value="أ">أ</option>
                                                     <option value="ب">ب</option>
                                                     <option value="ج">ج</option>
@@ -547,7 +572,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                         {q.correctAnswer === '?' && (
                                             <div className="mb-2 p-2 bg-red-900/30 border border-red-700/50 rounded text-red-200 text-sm flex items-center gap-2">
                                                 <XCircleIcon className="w-4 h-4" />
-                                                <span>هذا السؤال إجابته غير واضحة. يرجى التحقق من صورة الإجابة أدناه وتعديلها.</span>
+                                                <span>هذا السؤال إجابته غير واضحة. يرجى التحقق من صورة الإجابة أدناه واختيار الإجابة الصحيحة من القائمة أعلاه.</span>
                                             </div>
                                         )}
                                         {q.questionImage && (
@@ -651,7 +676,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                 )}
                             </div>
                             
-                            {/* Render Global Queue Status */}
+                            {/* Render Queue Status */}
                             {renderQueue()}
                             
                         </div>
