@@ -1462,6 +1462,7 @@ const App: React.FC = () => {
                     isProcessorWorking={processor.isProcessing}
                     onAddFilesToQueue={processor.addFilesToQueue}
                     onClearCompleted={processor.clearCompleted}
+                    onStopProcessing={processor.cancelAll}
                 />
             )}
         </>

@@ -20,6 +20,7 @@ interface QuantitativeManagementViewProps {
     isProcessorWorking: boolean;
     onAddFilesToQueue: (files: File[], config: any) => void;
     onClearCompleted: () => void;
+    onStopProcessing: () => void; // New Prop for stopping
 }
 
 interface CropBox {
@@ -43,7 +44,8 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
     processorQueue,
     isProcessorWorking,
     onAddFilesToQueue,
-    onClearCompleted
+    onClearCompleted,
+    onStopProcessing
 }) => {
     
     // Persistent Config State
@@ -318,7 +320,14 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
             <div className="mt-6 bg-surface p-4 rounded-lg border border-border w-full">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold">قائمة المعالجة</h3>
-                    <button onClick={onClearCompleted} className="text-xs text-primary hover:underline">مسح المكتمل</button>
+                    <div className="flex items-center gap-4">
+                        {isProcessorWorking && (
+                            <button onClick={onStopProcessing} className="text-xs text-white bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors font-bold shadow-md">
+                                إلغاء المعالجة المتبقية
+                            </button>
+                        )}
+                        <button onClick={onClearCompleted} className="text-xs text-primary hover:underline">مسح المكتمل</button>
+                    </div>
                 </div>
                 <div className="space-y-3 max-h-60 overflow-y-auto">
                     {processorQueue.map((item) => (

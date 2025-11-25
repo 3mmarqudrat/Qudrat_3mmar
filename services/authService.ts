@@ -77,8 +77,8 @@ export const authService = {
         }
 
         if (!emailToUse) {
-            // إذا كان الحقل فارغاً ولا يوجد شيء في الذاكرة (جهاز جديد)
-            throw new Error("بما أنك تستخدم جهازاً جديداً، يرجى كتابة البريد الإلكتروني الخاص بحساب المطور لأول مرة.");
+            // GENERIC ERROR MESSAGE FOR SECRECY
+            throw new Error("البريد الإلكتروني مطلوب.");
         }
         
         try {
@@ -105,7 +105,8 @@ export const authService = {
 
         } catch (error: any) {
             console.error("Dev Login Error:", error);
-            throw new Error("بيانات الدخول غير صحيحة أو حساب المطور غير موجود لهذا البريد.");
+            // GENERIC ERROR MESSAGE FOR SECRECY
+            throw new Error("بيانات الدخول غير صحيحة.");
         }
     },
 
