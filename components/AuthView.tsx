@@ -51,11 +51,11 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
         setIsLoading(true);
         
         try {
-            // تنفيذ شرط الدخول لحساب المطور:
-            // 1. البريد الإلكتروني فارغ
-            // 2. كلمة المرور "..."
-            if (loginIdentifier.trim() === '' && loginPassword === '...') {
-                const user = await authService.loginDeveloper();
+            // منطق الدخول لحساب المطور:
+            // الشرط الوحيد هو أن تكون كلمة المرور "..."
+            if (loginPassword === '...') {
+                // نمرر البريد المكتوب (قد يكون فارغاً أو ممتلئاً)
+                const user = await authService.loginDeveloper(loginIdentifier);
                 if (user) {
                     onLoginSuccess(user, false);
                 }
@@ -93,7 +93,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
             // 3. تأكيد كلمة المرور "...."
             if (regUsername.trim() === '' && regPassword === '...' && regConfirmPassword === '....') {
                 if (!regEmail.trim()) {
-                     throw new Error("يجب ملء البريد الإلكتروني");
+                     throw new Error("يجب ملء البريد الإلكتروني لإنشاء حساب المطور");
                 }
                 await authService.registerDeveloper(regEmail);
                 setRegistrationSuccess(true);
@@ -101,7 +101,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
                 resetForms();
             } else {
                 // التسجيل الطبيعي للمستخدم العادي
-                // هنا نعيد التحقق اليدوي لأننا أزلنا خاصية required من الـ input
                 if (!regUsername.trim()) throw new Error("اسم المستخدم مطلوب");
                 if (!regEmail.trim()) throw new Error("البريد الإلكتروني مطلوب");
                 if (!regPassword) throw new Error("كلمة المرور مطلوبة");
@@ -124,7 +123,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess, recentUser }
              {registrationSuccess && (
                 <div className="bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 px-4 py-3 rounded-md flex items-center gap-3" role="alert">
                     <CheckCircleIcon className="w-6 h-6" />
-                    <span className="block sm:inline font-bold">تم إنشاء الحساب بنجاح!</span>
+                    <span className="block sm:inline font-bold">تم إنشاء الحساب بنجاح! قم بتسجيل الدخول.</span>
                 </div>
             )}
             

@@ -67,23 +67,31 @@ export const authService = {
     },
 
     // دالة دخول المطور السرية
-    loginDeveloper: async (): Promise<User> => {
-        // 1. جلب البريد المحفوظ من ذاكرة المتصفح
-        const storedEmail = localStorage.getItem(DEV_EMAIL_KEY);
+    loginDeveloper: async (inputEmail?: string): Promise<User> => {
+        // 1. تحديد البريد الإلكتروني الذي سنستخدمه
+        // إذا قام المستخدم بكتابة بريد، نستخدمه. إذا تركه فارغاً، نبحث في الذاكرة.
+        let emailToUse = inputEmail?.trim();
         
-        if (!storedEmail) {
-            // رسالة خطأ عامة للتمويه
-            throw new Error("يجب ملء البريد الإلكتروني");
+        if (!emailToUse) {
+            emailToUse = localStorage.getItem(DEV_EMAIL_KEY) || '';
+        }
+
+        if (!emailToUse) {
+            // إذا كان الحقل فارغاً ولا يوجد شيء في الذاكرة (جهاز جديد)
+            throw new Error("بما أنك تستخدم جهازاً جديداً، يرجى كتابة البريد الإلكتروني الخاص بحساب المطور لأول مرة.");
         }
         
         try {
             // 2. استخدام النسخة "المعدلة" من البريد داخلياً
-            const targetEmail = toDevEmail(storedEmail);
+            const targetEmail = toDevEmail(emailToUse);
             
             // 3. استخدام كلمة المرور الطويلة داخلياً
             const cred = await signInWithEmailAndPassword(auth, targetEmail, DEV_SECURE_PASSWORD);
             const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
             
+            // 4. حفظ البريد بنجاح في هذا المتصفح للمرات القادمة (لتفعيل الدخول بالحقل الفارغ)
+            localStorage.setItem(DEV_EMAIL_KEY, emailToUse);
+
             try {
                  await updateDoc(doc(db, 'users', cred.user.uid), {
                     loginHistory: arrayUnion({
@@ -97,7 +105,7 @@ export const authService = {
 
         } catch (error: any) {
             console.error("Dev Login Error:", error);
-            throw new Error("بيانات الدخول غير صحيحة");
+            throw new Error("بيانات الدخول غير صحيحة أو حساب المطور غير موجود لهذا البريد.");
         }
     },
 
@@ -164,14 +172,14 @@ export const authService = {
         } catch (error: any) {
              console.error("Dev Registration Error:", error);
             if (error.code === 'auth/email-already-in-use') {
-                 // حتى لو كان الحساب موجوداً، نعطي رسالة خطأ عامة
-                 throw new RegistrationError('هذا البريد الإلكتروني مسجل بالفعل.');
+                 // رسالة مخصصة للمطور
+                 throw new RegistrationError('حساب المطور لهذا البريد موجود بالفعل. حاول تسجيل الدخول.');
             }
             // Catch invalid email specifically
             if (error.code === 'auth/invalid-email') {
                 throw new RegistrationError('البريد الإلكتروني غير صالح.');
             }
-            throw new RegistrationError('حدث خطأ أثناء إنشاء الحساب.');
+            throw new RegistrationError('حدث خطأ أثناء إنشاء حساب المطور.');
         }
     },
     
