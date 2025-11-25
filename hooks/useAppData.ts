@@ -1,3 +1,4 @@
+
 // ... (keeping existing imports)
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Test, Section, Question, TestAttempt, Folder, VerbalTests, VERBAL_BANKS, VERBAL_CATEGORIES, FolderQuestion } from '../types';
@@ -310,8 +311,8 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
         const qColl = collection(db, 'globalTests', testId, 'questions');
         const qSnap = await getDocs(qColl);
         
-        // 2. Batch delete questions (handling limit of 500)
-        const BATCH_SIZE = 500;
+        // 2. Batch delete questions (handling limit of 20 to safe-guard against large image payloads)
+        const BATCH_SIZE = 20;
         const chunks = [];
         for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
             chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
@@ -339,8 +340,8 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
              const qColl = collection(db, 'globalTests', testId, 'questions');
              const qSnap = await getDocs(qColl);
 
-             // 2. Batch delete questions (limit 500)
-             const BATCH_SIZE = 500;
+             // 2. Batch delete questions (Reduced to 20 to prevent Transaction Too Big errors with Base64 images)
+             const BATCH_SIZE = 20;
              const chunks = [];
              for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
                  chunks.push(qSnap.docs.slice(i, i + BATCH_SIZE));
