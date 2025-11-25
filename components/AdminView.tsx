@@ -43,7 +43,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onBack, onPreviewUser, onD
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<{key: string, user: User} | null>(null);
     const [viewHistoryUser, setViewHistoryUser] = useState<User | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [revealedPasswords, setRevealedPasswords] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         authService.getAllUsers().then(setUsers);
@@ -73,15 +72,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onBack, onPreviewUser, onD
         } finally {
             setIsDeleting(false);
         }
-    };
-    
-    const togglePasswordVisibility = (key: string) => {
-        setRevealedPasswords(prev => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-        });
     };
     
     const isUserActive = (user: User) => {
@@ -130,7 +120,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onBack, onPreviewUser, onD
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredUsers.map(({ key, user }) => {
                         const isActive = isUserActive(user);
-                        const isPasswordRevealed = revealedPasswords.has(key);
                         
                         return (
                          <div key={key} className="bg-surface rounded-lg border border-border p-4 flex flex-col justify-between relative overflow-hidden">
@@ -165,16 +154,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onBack, onPreviewUser, onD
                                     <div>
                                         <p className="text-xs text-text-muted">كلمة المرور</p>
                                         <div className="flex items-center gap-2">
-                                            <p className="font-mono text-sm tracking-wider">
-                                                {isPasswordRevealed ? (user.password || '******') : '******'}
+                                            <p className="font-mono text-sm tracking-wider text-yellow-400 font-bold bg-black/20 px-2 py-0.5 rounded">
+                                                {user.password || 'غير مسجلة'}
                                             </p>
-                                            <button 
-                                                onClick={() => togglePasswordVisibility(key)}
-                                                className="text-text-muted hover:text-text focus:outline-none"
-                                                title={isPasswordRevealed ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-                                            >
-                                                {isPasswordRevealed ? <EyeOffIcon className="w-4 h-4"/> : <EyeIcon className="w-4 h-4"/>}
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
