@@ -152,9 +152,18 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
             try {
                 setReferenceFile(file);
                 const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                // FIX: Pass data as object property to ensure compatibility
+                const loadingTask = pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
+                    cMapPacked: true,
+                });
+
+                const pdf = await loadingTask.promise;
                 const pageIndex = pdf.numPages > 1 ? 2 : 1;
                 const page = await pdf.getPage(pageIndex);
+                
                 const viewport = page.getViewport({ scale: 2.0 });
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');

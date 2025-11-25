@@ -236,7 +236,15 @@ export const useQuantitativeProcessor = (
         try {
             const file = pendingItem.file;
             const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            
+            // FIX: Pass data as object property here as well
+            const loadingTask = pdfjsLib.getDocument({
+                data: arrayBuffer,
+                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
+                cMapPacked: true,
+            });
+            
+            const pdf = await loadingTask.promise;
             
             const rawName = file.name.replace(/\.pdf$/i, '');
             const testName = rawName.split('-')[0].trim();
