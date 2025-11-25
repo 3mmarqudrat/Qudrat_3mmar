@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 const iconProps = {
@@ -254,5 +255,11 @@ export const CalendarIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ classNam
         <line x1="16" y1="2" x2="16" y2="6"></line>
         <line x1="8" y1="2" x2="8" y2="6"></line>
         <line x1="3" y1="10" x2="21" y2="10"></line>
+    </svg>
+);
+
+export const PenIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg {...iconProps} className={className || iconProps.className} {...props}>
+        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
     </svg>
 );

@@ -1,4 +1,5 @@
 
+
 export type Section = 'quantitative' | 'verbal';
 
 export interface LoginRecord {
@@ -43,6 +44,7 @@ export interface Question {
   options: string[];
   correctAnswer: string;
   order?: number; // Added for sorting preservation
+  isEdited?: boolean; // Added to track manual edits by developer
 }
 
 export interface Test {

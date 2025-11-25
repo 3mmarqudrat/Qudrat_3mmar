@@ -1,4 +1,5 @@
 
+
 // ... (keeping existing imports)
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Test, Section, Question, TestAttempt, Folder, VerbalTests, VERBAL_BANKS, VERBAL_CATEGORIES, FolderQuestion } from '../types';
@@ -288,11 +289,15 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
                   // Update Legacy Array
                   const updatedQuestions = [...testData.questions];
                   updatedQuestions[legacyIndex].correctAnswer = newAnswer;
+                  updatedQuestions[legacyIndex].isEdited = true; // Mark as edited
                   await updateDoc(testRef, { questions: updatedQuestions });
               } else {
                   // Update Subcollection Document
                   const qRef = doc(db, 'globalTests', testId, 'questions', questionId);
-                  await updateDoc(qRef, { correctAnswer: newAnswer });
+                  await updateDoc(qRef, { 
+                      correctAnswer: newAnswer,
+                      isEdited: true // Mark as edited
+                  });
               }
           }
       } catch (e) {

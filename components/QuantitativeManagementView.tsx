@@ -1,7 +1,8 @@
 
+
 // ... (keeping existing imports)
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon } from './Icons';
+import { ArrowRightIcon, UploadCloudIcon, CropIcon, TrashIcon, CheckCircleIcon, SaveIcon, ImageIcon, MousePointerIcon, EyeIcon, XCircleIcon, SettingsIcon, FileTextIcon, ZoomInIcon, ZoomOutIcon, PlayIcon, PenIcon } from './Icons';
 import { Question, Test, AppData, Section } from '../types';
 
 declare const pdfjsLib: any;
@@ -428,6 +429,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
 
     // Determine how many questions are unclear (answer is '?')
     const unclearCount = selectedTest ? selectedTest.questions.filter(q => q.correctAnswer === '?').length : 0;
+    const editedCount = selectedTest ? selectedTest.questions.filter(q => q.isEdited).length : 0;
 
     return (
         <div className="bg-bg min-h-screen flex flex-col">
@@ -487,6 +489,7 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                         {sortedTests.length > 0 ? (
                             sortedTests.map(test => {
                                 const unclearInList = test.questions.filter(q => q.correctAnswer === '?').length;
+                                const editedInList = test.questions.filter(q => q.isEdited).length;
                                 return (
                                     <div 
                                         key={test.id} 
@@ -504,11 +507,18 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                                             onClick={() => handleTestSelect(test.id)}
                                          >
                                             <span className="truncate font-bold pl-1">{test.name}</span>
-                                            {unclearInList > 0 && (
-                                                <span className="bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0" title={`${unclearInList} أسئلة غير واضحة`}>
-                                                    {unclearInList} ?
-                                                </span>
-                                            )}
+                                            <div className="flex gap-1 flex-shrink-0">
+                                                {editedInList > 0 && (
+                                                    <span className="bg-sky-500/20 text-sky-400 text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1" title={`${editedInList} أسئلة معدلة يدوياً`}>
+                                                        <PenIcon className="w-3 h-3"/> {editedInList}
+                                                    </span>
+                                                )}
+                                                {unclearInList > 0 && (
+                                                    <span className="bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full font-bold" title={`${unclearInList} أسئلة غير واضحة`}>
+                                                        {unclearInList} ?
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -525,11 +535,17 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
                             <div className="flex items-center justify-between bg-surface p-6 rounded-xl border border-border">
                                 <div>
                                     <h2 className="text-3xl font-bold text-primary">{selectedTest.name}</h2>
-                                    <div className="flex items-center gap-3 mt-1">
+                                    <div className="flex flex-wrap items-center gap-3 mt-1">
                                         <p className="text-text-muted">{selectedTest.questions.length} سؤال</p>
                                         {unclearCount > 0 && (
                                             <span className="text-sm font-bold text-red-400 bg-red-900/20 px-2 py-0.5 rounded border border-red-500/30">
                                                 ({unclearCount} سؤال بحاجة لتحديد الإجابة)
+                                            </span>
+                                        )}
+                                        {editedCount > 0 && (
+                                            <span className="text-sm font-bold text-sky-400 bg-sky-900/20 px-2 py-0.5 rounded border border-sky-500/30 flex items-center gap-1">
+                                                <PenIcon className="w-3 h-3"/>
+                                                ({editedCount} سؤال تم تعديله يدوياً)
                                             </span>
                                         )}
                                     </div>
@@ -546,9 +562,16 @@ export const QuantitativeManagementView: React.FC<QuantitativeManagementViewProp
 
                             <div className="space-y-4">
                                 {selectedTest.questions.map((q, idx) => (
-                                    <div key={idx} className={`bg-surface p-4 rounded-lg border ${q.correctAnswer === '?' ? 'border-red-500' : 'border-border'}`}>
+                                    <div key={idx} className={`bg-surface p-4 rounded-lg border ${q.correctAnswer === '?' ? 'border-red-500' : q.isEdited ? 'border-sky-500/50' : 'border-border'}`}>
                                         <div className="flex justify-between items-start mb-4">
-                                            <h3 className="font-bold text-lg text-text-muted">سؤال {idx + 1}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-bold text-lg text-text-muted">سؤال {idx + 1}</h3>
+                                                {q.isEdited && (
+                                                    <span className="text-xs font-bold text-sky-400 bg-sky-900/20 px-2 py-0.5 rounded flex items-center gap-1 border border-sky-500/30">
+                                                        <PenIcon className="w-3 h-3"/> تم التعديل يدوياً
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm text-text-muted">الإجابة الصحيحة:</span>
                                                  {/* Answer Dropdown */}
