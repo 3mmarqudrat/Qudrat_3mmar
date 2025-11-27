@@ -1,5 +1,6 @@
 
 
+
 // ... (keeping existing imports)
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Section, Test, TestAttempt, UserAnswer, Question, Folder, VERBAL_BANKS, VERBAL_CATEGORIES, VerbalTests, FolderQuestion, AppData, User, ReviewFilterState, ReviewAttributeFilterType } from './types';
@@ -127,9 +128,14 @@ const MultiSelectDropdown: React.FC<{
 
     const handleInputChange = (val: string) => {
         setInputValue(val);
-        // Match Range (1-10) OR Single Number (5)
-        const rangeMatch = val.match(/^(\d+)-(\d+)$/);
-        const singleMatch = val.match(/^(\d+)$/);
+        // Clean input to english digits
+        const cleanVal = val.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
+
+        // Match Range (e.g. 1-10 or 10-1) OR Single Number (5)
+        const rangeMatch = cleanVal.match(/^(\d+)-(\d+)$/);
+        const singleMatch = cleanVal.match(/^(\d+)$/);
+
+        let matchedValues: string[] = [];
 
         if (rangeMatch) {
             const start = parseInt(rangeMatch[1]);
@@ -137,9 +143,9 @@ const MultiSelectDropdown: React.FC<{
             const min = Math.min(start, end);
             const max = Math.max(start, end);
             
-            const matchedValues: string[] = [];
             options.forEach(opt => {
                  if (opt.value === 'all') return;
+                 // Extract number from test name (e.g. "اختبار 5" -> 5)
                  const numMatch = opt.label.match(/\d+/);
                  if (numMatch) {
                      const num = parseInt(numMatch[0]);
@@ -148,18 +154,8 @@ const MultiSelectDropdown: React.FC<{
                      }
                  }
             });
-            
-            if (matchedValues.length > 0) {
-                 const availableOptionsCount = options.filter(o => o.value !== 'all').length;
-                 if (matchedValues.length === availableOptionsCount) {
-                     onChange(['all']);
-                 } else {
-                     onChange(matchedValues);
-                 }
-            }
         } else if (singleMatch) {
             const targetNum = parseInt(singleMatch[1]);
-             const matchedValues: string[] = [];
              options.forEach(opt => {
                  if (opt.value === 'all') return;
                  const numMatch = opt.label.match(/\d+/);
@@ -170,7 +166,14 @@ const MultiSelectDropdown: React.FC<{
                      }
                  }
             });
-             if (matchedValues.length > 0) {
+        }
+
+        // Apply matches if found
+        if (matchedValues.length > 0) {
+             const availableOptionsCount = options.filter(o => o.value !== 'all').length;
+             if (matchedValues.length === availableOptionsCount) {
+                 onChange(['all']);
+             } else {
                  onChange(matchedValues);
              }
         }
@@ -875,9 +878,24 @@ const ReviewView: React.FC<{
         if (filters.activePanel === 'attribute') {
              const parts = [];
              if (section === 'quantitative') {
-                 const tests = filters.attributeFilters.selectedTestIds.includes('all') ? 'الكل' : `${filters.attributeFilters.selectedTestIds.length} محدد`;
+                 // Enhanced Test Number Display
+                 let testsLabel = 'الكل';
+                 if (!filters.attributeFilters.selectedTestIds.includes('all')) {
+                     const selectedCount = filters.attributeFilters.selectedTestIds.length;
+                     // Only show names if 5 or fewer are selected to avoid clutter
+                     if (selectedCount <= 5) {
+                         const names = availableTestsForSelection
+                            .filter(t => filters.attributeFilters.selectedTestIds.includes(t.id))
+                            .map(t => t.name)
+                            .join('، ');
+                         testsLabel = names;
+                     } else {
+                         testsLabel = `${toArabic(selectedCount)} اختبارات محددة`;
+                     }
+                 }
+                 
                  const types = filters.attributeFilters.type.includes('all') ? 'الكل' : filters.attributeFilters.type.map(t => typeOptions.find(o => o.value === t)?.label).join(', ');
-                 parts.push(`الاختبارات: ${tests}`);
+                 parts.push(`الاختبارات: ${testsLabel}`);
                  parts.push(`النوع: ${types}`);
              } else {
                  const banks = filters.attributeFilters.bank.includes('all') ? 'الكل' : filters.attributeFilters.bank.map(b => bankOptions.find(o => o.value === b)?.label).join(', ');
@@ -996,13 +1014,24 @@ const ReviewView: React.FC<{
                     )}
                 </div>
                 
-                {/* Filter Summary Header */}
-                <div className="mb-4 p-3 bg-zinc-900/50 border-r-4 border-primary rounded-r shadow-sm">
-                    <p className="text-sm font-semibold text-zinc-300">
-                        <span className="text-primary font-bold ml-2">الإعدادات الحالية:</span>
-                        {getFilterSummary()}
-                    </p>
-                </div>
+                {/* Filter Summary Header - ALWAYS visible below panels in Other tab */}
+                {filters.activeTab === 'other' && (
+                    <div className="mb-4 p-4 bg-zinc-900/80 border-r-4 border-primary rounded-r shadow-md backdrop-blur-sm">
+                        <p className="text-base font-semibold text-zinc-200 leading-relaxed">
+                            <span className="text-primary font-bold ml-2 block sm:inline mb-1 sm:mb-0">الاختيارات الحالية:</span>
+                            {getFilterSummary()}
+                        </p>
+                    </div>
+                )}
+                
+                {filters.activeTab !== 'other' && (
+                     <div className="mb-4 p-3 bg-zinc-900/50 border-r-4 border-primary rounded-r shadow-sm">
+                        <p className="text-sm font-semibold text-zinc-300">
+                            <span className="text-primary font-bold ml-2">القسم الحالي:</span>
+                            {currentTabLabel}
+                        </p>
+                    </div>
+                )}
 
                 <div className="space-y-4">
                     {filteredReviewTests.map(test => (
@@ -1023,7 +1052,7 @@ const ReviewView: React.FC<{
                 </div>
                 {filteredReviewTests.length === 0 && (
                     <div className="text-center text-text-muted py-16">
-                        <p className="text-lg">لا توجد أسئلة للمراجعة في <span className="text-primary font-bold">"{filters.activeTab === 'other' ? getFilterSummary() : currentTabLabel}"</span>.</p>
+                        <p className="text-lg">لا توجد أسئلة للمراجعة في <span className="text-primary font-bold">"{filters.activeTab === 'other' ? (filters.activePanel === 'time' ? 'الوقت المحدد' : 'الخصائص المحددة') : currentTabLabel}"</span>.</p>
                     </div>
                 )}
             </main>
@@ -1031,6 +1060,7 @@ const ReviewView: React.FC<{
     );
 };
 
+// ... (HistoryView, App same as before) ...
 const HistoryView: React.FC<{ history: TestAttempt[]; onBack: () => void; onReviewAttempt: (attempt: TestAttempt) => void; user: User; onLogout: () => void; }> = ({ history, onBack, onReviewAttempt, user, onLogout }) => (
     <div className="bg-bg min-h-screen">
         <Header 
