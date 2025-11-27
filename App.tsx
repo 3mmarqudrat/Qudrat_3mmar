@@ -73,7 +73,7 @@ const UserMenu: React.FC<{ user: User; onLogout: () => void; children?: React.Re
     </div>
 );
 
-// ... (MultiSelectDropdown, Header, SectionCard components same as before) ...
+// ... (MultiSelectDropdown updated for single number input) ...
 const MultiSelectDropdown: React.FC<{
     label: string;
     options: { value: string; label: string }[];
@@ -127,7 +127,10 @@ const MultiSelectDropdown: React.FC<{
 
     const handleInputChange = (val: string) => {
         setInputValue(val);
+        // Match Range (1-10) OR Single Number (5)
         const rangeMatch = val.match(/^(\d+)-(\d+)$/);
+        const singleMatch = val.match(/^(\d+)$/);
+
         if (rangeMatch) {
             const start = parseInt(rangeMatch[1]);
             const end = parseInt(rangeMatch[2]);
@@ -154,6 +157,22 @@ const MultiSelectDropdown: React.FC<{
                      onChange(matchedValues);
                  }
             }
+        } else if (singleMatch) {
+            const targetNum = parseInt(singleMatch[1]);
+             const matchedValues: string[] = [];
+             options.forEach(opt => {
+                 if (opt.value === 'all') return;
+                 const numMatch = opt.label.match(/\d+/);
+                 if (numMatch) {
+                     const num = parseInt(numMatch[0]);
+                     if (num === targetNum) {
+                         matchedValues.push(opt.value);
+                     }
+                 }
+            });
+             if (matchedValues.length > 0) {
+                 onChange(matchedValues);
+             }
         }
     };
 
@@ -255,6 +274,7 @@ const SectionCard: React.FC<{ title: string; icon: React.ReactNode; onClick: () 
     </div>
 );
 
+// ... (HomeView, ModeSelectionView, SectionView same as before) ...
 const HomeView: React.FC<{
     username: string;
     onSelectUserMode: (mode: 'training' | 'review') => void;
@@ -694,10 +714,22 @@ const ReviewView: React.FC<{
             }
         }
     }, [section, filters.activeTab, setFilters]);
+    
+    // Sort logic helper
+    const getTestNumber = (name: string) => {
+        const normalized = name.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
+        const match = normalized.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+    };
 
     const availableTestsForSelection = useMemo(() => {
         if (section === 'quantitative') {
-            return data.tests.quantitative.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+            return data.tests.quantitative.sort((a, b) => {
+                const numA = getTestNumber(a.name);
+                const numB = getTestNumber(b.name);
+                if (numA !== numB) return numA - numB;
+                return a.name.localeCompare(b.name);
+            });
         } else {
             return [];
         }
@@ -707,7 +739,7 @@ const ReviewView: React.FC<{
         setFilters(prev => ({
             ...prev,
             activePanel: 'attribute',
-            dateFilter: null,
+            // dateFilter: null, REMOVED to keep selection
             attributeFilters: {
                 ...prev.attributeFilters,
                 [key]: newValues
@@ -743,6 +775,7 @@ const ReviewView: React.FC<{
                 return q.reviewType === filters.activeTab;
             });
         } else {
+            // Apply filtering logic based on Active Panel, but use persisted values
             if (filters.activePanel === 'time' && filters.dateFilter) {
                  const now = new Date();
                 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -821,6 +854,47 @@ const ReviewView: React.FC<{
         { id: 'other', label: 'أخرى' }
     ] as const;
 
+    // Helper to generate summary string
+    const getFilterSummary = () => {
+        if (filters.activeTab !== 'other') {
+             const tabLabel = reviewTabs.find(t => t.id === filters.activeTab)?.label || filters.activeTab;
+             return `عرض القسم: ${tabLabel}`;
+        }
+        
+        if (filters.activePanel === 'time') {
+             let timeLabel = 'غير محدد';
+             if (filters.dateFilter === 'today') timeLabel = 'اليوم';
+             else if (filters.dateFilter === 'week') timeLabel = 'آخر أسبوع';
+             else if (filters.dateFilter === 'month') timeLabel = 'آخر شهر';
+             else if (filters.dateFilter === 'byDay') timeLabel = 'حسب الأيام';
+             else if (filters.dateFilter === 'byMonth') timeLabel = 'حسب الأشهر';
+             
+             return `تصفية حسب الوقت: ${timeLabel}`;
+        }
+        
+        if (filters.activePanel === 'attribute') {
+             const parts = [];
+             if (section === 'quantitative') {
+                 const tests = filters.attributeFilters.selectedTestIds.includes('all') ? 'الكل' : `${filters.attributeFilters.selectedTestIds.length} محدد`;
+                 const types = filters.attributeFilters.type.includes('all') ? 'الكل' : filters.attributeFilters.type.map(t => typeOptions.find(o => o.value === t)?.label).join(', ');
+                 parts.push(`الاختبارات: ${tests}`);
+                 parts.push(`النوع: ${types}`);
+             } else {
+                 const banks = filters.attributeFilters.bank.includes('all') ? 'الكل' : filters.attributeFilters.bank.map(b => bankOptions.find(o => o.value === b)?.label).join(', ');
+                 const cats = filters.attributeFilters.category.includes('all') ? 'الكل' : filters.attributeFilters.category.map(c => categoryOptions.find(o => o.value === c)?.label).join(', ');
+                 const types = filters.attributeFilters.type.includes('all') ? 'الكل' : filters.attributeFilters.type.map(t => typeOptions.find(o => o.value === t)?.label).join(', ');
+                 parts.push(`البنك: ${banks}`);
+                 parts.push(`القسم: ${cats}`);
+                 parts.push(`النوع: ${types}`);
+             }
+             return `تصفية حسب الخصائص | ${parts.join(' | ')}`;
+        }
+        
+        return 'قائمة أخرى';
+    };
+    
+    const currentTabLabel = reviewTabs.find(t => t.id === filters.activeTab)?.label || filters.activeTab;
+
     return (
          <div className="bg-bg min-h-screen">
             <Header title={`مراجعة ${section === 'quantitative' ? 'القسم الكمي' : 'القسم اللفظي'}`} leftSlot={headerLeftSlot} rightSlot={headerRightSlot} />
@@ -836,9 +910,12 @@ const ReviewView: React.FC<{
                     </div>
                     {filters.activeTab === 'other' && (
                         <div className="mt-4 p-4 border-t border-border space-y-4">
-                            <div className={`bg-zinc-800 p-3 rounded-md border  ${filters.activePanel === 'time' ? 'border-accent' : 'border-zinc-700'} transition-colors`}>
-                                <h3 className="text-lg font-bold mb-2">التصنيف حسب الوقت</h3>
-                                <div className="flex flex-wrap gap-2">
+                            <div 
+                                onClick={() => setFilters(prev => ({...prev, activePanel: 'time'}))} // Click to activate panel
+                                className={`bg-zinc-800 p-3 rounded-md border  ${filters.activePanel === 'time' ? 'border-accent ring-1 ring-accent' : 'border-zinc-700 hover:border-zinc-500'} transition-all cursor-pointer`}
+                            >
+                                <h3 className="text-lg font-bold mb-2 text-text-muted">التصنيف حسب الوقت</h3>
+                                <div className="flex flex-wrap gap-2" onClick={e => e.stopPropagation()}>
                                      {(['today', 'week', 'month', 'byDay', 'byMonth'] as const).map(df => (
                                          <button key={df} onClick={() => setFilters(prev => ({...prev, activePanel: 'time', dateFilter: df }))}
                                             className={`px-4 py-1 text-sm rounded-md transition-colors ${filters.activePanel === 'time' && filters.dateFilter === df ? 'bg-accent text-white ring-2 ring-accent-hover' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
@@ -854,9 +931,10 @@ const ReviewView: React.FC<{
 
                             {section === 'quantitative' && (
                                 <div 
-                                    onClick={() => setFilters(prev => ({ ...prev, activePanel: 'attribute', dateFilter: null }))}
-                                    className={`bg-zinc-800 p-3 rounded-md border ${filters.activePanel === 'attribute' ? 'border-accent' : 'border-zinc-700'} space-y-3 transition-colors cursor-pointer`}
+                                    onClick={() => setFilters(prev => ({ ...prev, activePanel: 'attribute' }))} // Click to activate panel
+                                    className={`bg-zinc-800 p-3 rounded-md border ${filters.activePanel === 'attribute' ? 'border-accent ring-1 ring-accent' : 'border-zinc-700 hover:border-zinc-500'} space-y-3 transition-all cursor-pointer`}
                                 >
+                                     <h3 className="text-lg font-bold mb-2 text-text-muted">التصنيف حسب الخصائص</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4" onClick={e => e.stopPropagation()}>
                                         <div>
                                             <MultiSelectDropdown
@@ -865,7 +943,7 @@ const ReviewView: React.FC<{
                                                 selectedValues={filters.attributeFilters.selectedTestIds.length ? filters.attributeFilters.selectedTestIds : ['all']}
                                                 onChange={(vals) => handleAttributeChange('selectedTestIds', vals)}
                                                 showInput={true}
-                                                inputPlaceholder="اكتب نطاق (مثال: 1-10)"
+                                                inputPlaceholder="اكتب رقم أو نطاق (مثال: 5)"
                                             />
                                         </div>
                                         <div>
@@ -882,10 +960,10 @@ const ReviewView: React.FC<{
 
                              {section === 'verbal' && (
                                 <div 
-                                    onClick={() => setFilters(prev => ({ ...prev, activePanel: 'attribute', dateFilter: null }))}
-                                    className={`bg-zinc-800 p-3 rounded-md border ${filters.activePanel === 'attribute' ? 'border-accent' : 'border-zinc-700'} space-y-3 transition-colors cursor-pointer`}
+                                    onClick={() => setFilters(prev => ({ ...prev, activePanel: 'attribute' }))} // Click to activate panel
+                                    className={`bg-zinc-800 p-3 rounded-md border ${filters.activePanel === 'attribute' ? 'border-accent ring-1 ring-accent' : 'border-zinc-700 hover:border-zinc-500'} space-y-3 transition-all cursor-pointer`}
                                 >
-                                    <h3 className="text-lg font-bold mb-2">التصنيف حسب الخصائص</h3>
+                                    <h3 className="text-lg font-bold mb-2 text-text-muted">التصنيف حسب الخصائص</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3" onClick={e => e.stopPropagation()}>
                                         <div>
                                              <MultiSelectDropdown
@@ -918,6 +996,14 @@ const ReviewView: React.FC<{
                     )}
                 </div>
                 
+                {/* Filter Summary Header */}
+                <div className="mb-4 p-3 bg-zinc-900/50 border-r-4 border-primary rounded-r shadow-sm">
+                    <p className="text-sm font-semibold text-zinc-300">
+                        <span className="text-primary font-bold ml-2">الإعدادات الحالية:</span>
+                        {getFilterSummary()}
+                    </p>
+                </div>
+
                 <div className="space-y-4">
                     {filteredReviewTests.map(test => (
                          <div key={test.id}
@@ -937,7 +1023,7 @@ const ReviewView: React.FC<{
                 </div>
                 {filteredReviewTests.length === 0 && (
                     <div className="text-center text-text-muted py-16">
-                        <p className="text-lg">لا توجد أسئلة للمراجعة تطابق هذا الفلتر.</p>
+                        <p className="text-lg">لا توجد أسئلة للمراجعة في <span className="text-primary font-bold">"{filters.activeTab === 'other' ? getFilterSummary() : currentTabLabel}"</span>.</p>
                     </div>
                 )}
             </main>
