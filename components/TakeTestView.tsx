@@ -125,7 +125,7 @@ const QuestionAccordion: React.FC<{
                         </div>
                     </div>
                 ) : (
-                    /* Verbal Layout: Standard Header */
+                    /* Verbal Layout: Separate Flag and Bookmark buttons */
                     <div className="flex items-center gap-4 w-full overflow-hidden">
                          <div className="flex-shrink-0 flex items-center gap-2">
                             {isReviewTest && (
@@ -134,9 +134,14 @@ const QuestionAccordion: React.FC<{
                                 </button>
                             )}
                             {!isReviewMode && !isReviewTest && (
-                                <button onClick={(e) => { e.stopPropagation(); onToggleFlag(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFlagged ? 'bg-yellow-900/40' : ''}`} title="تأجيل / إضافة للمراجعة">
-                                    <FlagIcon className={`w-5 h-5 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
-                                </button>
+                                <>
+                                    <button onClick={(e) => { e.stopPropagation(); onToggleBookmark(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isBookmarked ? 'bg-blue-900/40' : ''}`} title="إضافة للمراجعة">
+                                        <BookmarkIcon className={`w-5 h-5 ${isBookmarked ? 'text-blue-400 fill-current' : 'text-text-muted'}`} />
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); onToggleFlag(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFlagged ? 'bg-yellow-900/40' : ''}`} title="تأجيل السؤال">
+                                        <FlagIcon className={`w-5 h-5 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
+                                    </button>
+                                </>
                             )}
                          </div>
                         <div className="w-full overflow-hidden">
@@ -354,6 +359,8 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
         const solved = userAnswers.filter(a => a.answer && a.answer !== '').length;
         const total = test.questions.length;
         const flaggedCount = sessionFlaggedIds.size;
+        // Remaining is total minus (solved + unique flagged/bookmarked that are not solved)
+        // For simplicity, unsolved is just total - solved.
         return { solved, unsolved: total - solved, flagged: flaggedCount, total };
     }, [userAnswers, test.questions, sessionFlaggedIds]);
 
@@ -424,27 +431,27 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
             </header>
             
             <div className="flex flex-row flex-grow overflow-hidden">
-                {/* Advanced progress Sidebar with Circle Icons */}
-                <aside className="hidden lg:flex w-72 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
+                {/* Advanced progress Sidebar with Optimized Circle Sizes */}
+                <aside className="hidden lg:flex w-64 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
                     <h2 className="text-xl font-bold text-primary pb-2 border-b border-zinc-700">تقدم الاختبار</h2>
                     
-                    <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
-                            <p className="text-[10px] text-text-muted">تم الحل</p>
-                            <p className="text-lg font-bold text-green-400">{toArabic(stats.solved)}</p>
+                    <div className="grid grid-cols-3 gap-1">
+                        <div className="bg-zinc-800 p-1.5 rounded border border-zinc-700 text-center">
+                            <p className="text-[9px] text-text-muted">تم الحل</p>
+                            <p className="text-base font-bold text-green-400">{toArabic(stats.solved)}</p>
                         </div>
-                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
-                            <p className="text-[10px] text-text-muted">مؤجل</p>
-                            <p className="text-lg font-bold text-yellow-400">{toArabic(stats.flagged)}</p>
+                        <div className="bg-zinc-800 p-1.5 rounded border border-zinc-700 text-center">
+                            <p className="text-[9px] text-text-muted">مؤجل</p>
+                            <p className="text-base font-bold text-yellow-400">{toArabic(stats.flagged)}</p>
                         </div>
-                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
-                            <p className="text-[10px] text-text-muted">متبقي</p>
-                            <p className="text-lg font-bold text-zinc-400">{toArabic(stats.unsolved)}</p>
+                        <div className="bg-zinc-800 p-1.5 rounded border border-zinc-700 text-center">
+                            <p className="text-[9px] text-text-muted">متبقي</p>
+                            <p className="text-base font-bold text-zinc-400">{toArabic(stats.unsolved)}</p>
                         </div>
                     </div>
 
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
-                        <div className="grid grid-cols-5 gap-3">
+                        <div className="grid grid-cols-5 gap-2 px-1">
                             {test.questions.map((q, idx) => {
                                 const isAnswered = userAnswers.find(a => a.questionId === q.id)?.answer;
                                 const isFlagged = sessionFlaggedIds.has(q.id) || reviewedQuestionIds.has(q.id);
@@ -461,14 +468,14 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                 }
                                 
                                 if (isCurrent) {
-                                    btnClass += " ring-2 ring-primary ring-offset-2 ring-offset-bg scale-110";
+                                    btnClass += " ring-2 ring-primary ring-offset-2 ring-offset-bg scale-105";
                                 }
 
                                 return (
                                     <button 
                                         key={q.id}
                                         onClick={() => handleJumpToQuestion(idx)}
-                                        className={`w-full aspect-square flex items-center justify-center rounded-full border text-xs font-bold transition-all ${btnClass}`}
+                                        className={`w-9 h-9 flex items-center justify-center rounded-full border text-[11px] font-bold transition-all ${btnClass}`}
                                     >
                                         {toArabic(idx + 1)}
                                     </button>
