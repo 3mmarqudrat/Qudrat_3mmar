@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Test, UserAnswer, TestAttempt, Question, FolderQuestion, VERBAL_BANKS, VERBAL_CATEGORIES } from '../types';
-import { ArrowRightIcon, ClockIcon, CheckCircleIcon, XCircleIcon, FlagIcon, ChevronDownIcon, InfoIcon, FileTextIcon, ZoomInIcon, StarIcon, LogOutIcon, BookOpenIcon, ArrowLeftIcon } from './Icons';
+import { ArrowRightIcon, ClockIcon, CheckCircleIcon, XCircleIcon, FlagIcon, ChevronDownIcon, InfoIcon, FileTextIcon, ZoomInIcon, StarIcon, LogOutIcon, BookOpenIcon, ArrowLeftIcon, BookmarkIcon } from './Icons';
 
 const toArabic = (n: number | string) => ('' + n).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]);
 
@@ -34,14 +35,15 @@ const QuestionAccordion: React.FC<{
     onToggleFlag: () => void;
     isSpecialLaw: boolean;
     onToggleSpecialLaw: () => void;
+    isBookmarked: boolean;
+    onToggleBookmark: () => void;
     isFlagButtonDisabled: boolean;
     onShowInfo: () => void;
     isReviewTest: boolean;
     isQuantitative: boolean;
     onZoomImage: (src: string) => void;
-    // Fix: Change innerRef type from RefObject to Ref to support callback refs for dynamic list indexing
     innerRef?: React.Ref<HTMLDivElement>;
-}> = ({ question, qNumber, isReviewMode, userAnswer, onSelectAnswer, isFlagged, onToggleFlag, isSpecialLaw, onToggleSpecialLaw, isFlagButtonDisabled, onShowInfo, isReviewTest, isQuantitative, onZoomImage, innerRef }) => {
+}> = ({ question, qNumber, isReviewMode, userAnswer, onSelectAnswer, isFlagged, onToggleFlag, isSpecialLaw, onToggleSpecialLaw, isBookmarked, onToggleBookmark, isFlagButtonDisabled, onShowInfo, isReviewTest, isQuantitative, onZoomImage, innerRef }) => {
     const hasAnswered = userAnswer !== undefined;
     const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -70,74 +72,107 @@ const QuestionAccordion: React.FC<{
     return (
         <div ref={innerRef} className={`bg-surface rounded-lg border border-border overflow-hidden transition-all ${isQuantitative ? 'shadow-2xl' : ''}`}>
             <div 
-                className={`flex justify-between items-center p-4 ${(!isQuantitative && (hasAnswered || isReviewMode)) ? 'cursor-pointer' : 'cursor-default'}`}
+                className={`p-4 ${(!isQuantitative && (hasAnswered || isReviewMode)) ? 'cursor-pointer' : 'cursor-default'}`}
                 onClick={handleHeaderClick}
             >
-                <div className="flex items-center gap-4 w-full overflow-hidden">
-                     <div className="flex-shrink-0 flex items-center gap-2">
-                        {isReviewTest && (
-                            <button onClick={(e) => { e.stopPropagation(); onShowInfo(); }} className="p-2 rounded-full hover:bg-zinc-600 transition-colors" title="معلومات السؤال">
-                                <InfoIcon className="w-5 h-5 text-sky-400"/>
-                            </button>
-                        )}
-                        {!isReviewMode && !isReviewTest && (
-                            <>
-                                <button onClick={(e) => { e.stopPropagation(); onToggleFlag(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFlagged ? 'bg-yellow-900/40' : ''}`} title={isFlagButtonDisabled ? "هذا السؤال تمت إضافته للمراجعة بالفعل" : "تأجيل / إضافة للمراجعة"}>
-                                    <FlagIcon className={`w-5 h-5 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
-                                </button>
-                                {isQuantitative && (
-                                     <button onClick={(e) => { e.stopPropagation(); onToggleSpecialLaw(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isSpecialLaw ? 'bg-purple-900/40' : ''}`} title={isFlagButtonDisabled ? "هذا السؤال تمت إضافته للمراجعة بالفعل" : "إضافة السؤال لقانون خاص"}>
-                                        <StarIcon className={`w-5 h-5 ${isSpecialLaw ? 'text-purple-400 fill-current' : 'text-text-muted'}`} />
+                {isQuantitative ? (
+                    /* Quantitative Layout: Right (Star), Middle (Bookmark), Left (Flag) */
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between w-full border-b border-zinc-700/50 pb-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl font-bold text-text-muted select-none">{toArabic(qNumber)}.</span>
+                                {!isReviewMode && !isReviewTest && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onToggleSpecialLaw(); }} 
+                                        className={`p-2 rounded-full hover:bg-zinc-600 transition-colors ${isSpecialLaw ? 'bg-purple-900/40' : ''}`}
+                                        title="إضافة للقانون الخاص"
+                                    >
+                                        <StarIcon className={`w-6 h-6 ${isSpecialLaw ? 'text-purple-400 fill-current' : 'text-text-muted'}`} />
                                     </button>
                                 )}
-                            </>
-                        )}
-                     </div>
-                    <div className="w-full overflow-hidden">
-                         <div className="text-xl font-semibold leading-relaxed text-right flex justify-between items-center gap-4" style={{color: 'var(--color-gold)'}}>
-                            <div className="flex flex-col gap-1 w-full">
-                                <div className="flex justify-between items-start w-full">
-                                     <span className="break-words w-full">
-                                        <span className="text-text-muted select-none">{toArabic(qNumber)}. </span>
-                                        {question.questionText}
-                                     </span>
-                                </div>
-                                {isReviewMode && (
-                                    <div className="mt-1 flex flex-wrap gap-4 items-center">
-                                        <span className="text-sm font-bold text-success bg-green-900/30 px-2 py-1 rounded inline-block">
-                                            الإجابة الصحيحة: {question.correctAnswer}
-                                        </span>
-                                        {question.verificationImage && (
-                                            <div className="flex items-center gap-2 bg-zinc-900/50 px-2 py-1 rounded border border-zinc-700 max-w-full overflow-hidden">
-                                                <span className="text-xs text-text-muted flex-shrink-0">المصدر:</span>
-                                                <img src={question.verificationImage} alt="Answer Source" className="h-16 object-contain rounded-sm bg-white" />
-                                            </div>
-                                        )}
-                                    </div>
+                            </div>
+
+                            {!isReviewMode && !isReviewTest && (
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); onToggleBookmark(); }} 
+                                    className={`p-2 rounded-full hover:bg-zinc-600 transition-colors ${isBookmarked ? 'bg-blue-900/40' : ''}`}
+                                    title="إضافة للمراجعة العامة"
+                                >
+                                    <BookmarkIcon className={`w-6 h-6 ${isBookmarked ? 'text-blue-400 fill-current' : 'text-text-muted'}`} />
+                                </button>
+                            )}
+
+                            <div className="flex items-center gap-3">
+                                {!isReviewMode && !isReviewTest && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onToggleFlag(); }} 
+                                        className={`p-2 rounded-full hover:bg-zinc-600 transition-colors ${isFlagged ? 'bg-yellow-900/40' : ''}`}
+                                        title="تأجيل السؤال"
+                                    >
+                                        <FlagIcon className={`w-6 h-6 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
+                                    </button>
+                                )}
+                                {isReviewTest && (
+                                    <button onClick={(e) => { e.stopPropagation(); onShowInfo(); }} className="p-2 rounded-full hover:bg-zinc-600 transition-colors" title="معلومات السؤال">
+                                        <InfoIcon className="w-6 h-6 text-sky-400"/>
+                                    </button>
                                 )}
                             </div>
                         </div>
-                        {question.questionImage && (
-                            <div className="mt-4 flex justify-center relative group">
-                                <img 
-                                    src={question.questionImage} 
-                                    alt="سؤال" 
-                                    onClick={(e) => { e.stopPropagation(); if(isQuantitative) onZoomImage(question.questionImage!); }}
-                                    className={`max-w-full rounded-lg border border-border transition-all ${isQuantitative ? 'max-h-[70vh] cursor-zoom-in hover:border-primary shadow-lg scale-[1.02]' : 'max-h-64'}`} 
-                                />
-                                {isQuantitative && (
-                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                        <span className="bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-                                            <ZoomInIcon className="w-3 h-3" /> تكبير
-                                        </span>
+                        
+                        <div className="text-2xl font-semibold leading-relaxed text-right" style={{color: 'var(--color-gold)'}}>
+                            {question.questionText}
+                        </div>
+                    </div>
+                ) : (
+                    /* Verbal Layout: Standard Header */
+                    <div className="flex items-center gap-4 w-full overflow-hidden">
+                         <div className="flex-shrink-0 flex items-center gap-2">
+                            {isReviewTest && (
+                                <button onClick={(e) => { e.stopPropagation(); onShowInfo(); }} className="p-2 rounded-full hover:bg-zinc-600 transition-colors" title="معلومات السؤال">
+                                    <InfoIcon className="w-5 h-5 text-sky-400"/>
+                                </button>
+                            )}
+                            {!isReviewMode && !isReviewTest && (
+                                <button onClick={(e) => { e.stopPropagation(); onToggleFlag(); }} disabled={isFlagButtonDisabled} className={`p-2 rounded-full hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFlagged ? 'bg-yellow-900/40' : ''}`} title="تأجيل / إضافة للمراجعة">
+                                    <FlagIcon className={`w-5 h-5 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
+                                </button>
+                            )}
+                         </div>
+                        <div className="w-full overflow-hidden">
+                             <div className="text-xl font-semibold leading-relaxed text-right flex justify-between items-center gap-4" style={{color: 'var(--color-gold)'}}>
+                                <div className="flex flex-col gap-1 w-full">
+                                    <div className="flex justify-between items-start w-full">
+                                         <span className="break-words w-full">
+                                            <span className="text-text-muted select-none">{toArabic(qNumber)}. </span>
+                                            {question.questionText}
+                                         </span>
                                     </div>
-                                )}
+                                </div>
+                            </div>
+                        </div>
+                        {(hasAnswered || isReviewMode) && (
+                             <ChevronDownIcon className={`w-6 h-6 text-text-muted transition-transform duration-300 flex-shrink-0 ${isCollapsed ? '' : 'rotate-180'}`} />
+                        )}
+                    </div>
+                )}
+
+                {question.questionImage && (
+                    <div className="mt-6 flex justify-center relative group">
+                        <img 
+                            src={question.questionImage} 
+                            alt="سؤال" 
+                            onClick={(e) => { e.stopPropagation(); if(isQuantitative) onZoomImage(question.questionImage!); }}
+                            className={`max-w-full rounded-lg border border-border transition-all ${isQuantitative ? 'max-h-[70vh] cursor-zoom-in hover:border-primary shadow-lg scale-[1.01]' : 'max-h-64'}`} 
+                        />
+                        {isQuantitative && (
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                <span className="bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                    <ZoomInIcon className="w-3 h-3" /> تكبير
+                                </span>
                             </div>
                         )}
                     </div>
-                </div>
-                {!isQuantitative && (hasAnswered || isReviewMode) && (
-                     <ChevronDownIcon className={`w-6 h-6 text-text-muted transition-transform duration-300 flex-shrink-0 ${isCollapsed ? '' : 'rotate-180'}`} />
                 )}
             </div>
             
@@ -168,6 +203,11 @@ const QuestionAccordion: React.FC<{
                                 </button>
                             ))}
                         </div>
+                        {isReviewMode && userAnswer === undefined && (
+                            <div className="mt-4 text-center p-3 bg-red-900/40 border border-red-700 rounded-md">
+                                <p className="font-bold text-red-400">لم يتم حل السؤال</p>
+                            </div>
+                        )}
                      </div>
                  </div>
             </div>
@@ -196,6 +236,7 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
     const [elapsedTime, setElapsedTime] = useState(initialElapsedTime || 0);
     const [sessionFlaggedIds, setSessionFlaggedIds] = useState<Set<string>>(new Set());
     const [sessionSpecialLawIds, setSessionSpecialLawIds] = useState<Set<string>>(new Set());
+    const [sessionBookmarkIds, setSessionBookmarkIds] = useState<Set<string>>(new Set());
     const [infoModalQuestion, setInfoModalQuestion] = useState<FolderQuestion | null>(null);
     const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
     const [reviewFilter, setReviewFilter] = useState<'all' | 'correct' | 'incorrect' | 'unanswered'>('all');
@@ -203,7 +244,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
     const timerRef = useRef<number | null>(null);
     const [showExitConfirm, setShowExitConfirm] = useState(false);
     
-    // Refs for scrolling to Verbal questions
     const verbalQuestionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const isReviewTest = test.id.includes('review_');
@@ -228,6 +268,13 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                 const qIndex = test.questions.findIndex(q => q.id === questionId);
                 if (question) onAddDelayedReview(question, qIndex);
             });
+            // Also treat bookmarks as delayed/review items if no specific bookmark handler exists
+            sessionBookmarkIds.forEach(questionId => {
+                 if (reviewedQuestionIds.has(questionId)) return;
+                 const question = test.questions.find(q => q.id === questionId);
+                 const qIndex = test.questions.findIndex(q => q.id === questionId);
+                 if (question) onAddDelayedReview(question, qIndex);
+            });
         }
         if (onAddSpecialLawReview) {
              sessionSpecialLawIds.forEach(questionId => {
@@ -237,7 +284,7 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                 if (question) onAddSpecialLawReview(question, qIndex);
             });
         }
-    }, [sessionFlaggedIds, sessionSpecialLawIds, onAddDelayedReview, onAddSpecialLawReview, test.questions, reviewedQuestionIds]);
+    }, [sessionFlaggedIds, sessionSpecialLawIds, sessionBookmarkIds, onAddDelayedReview, onAddSpecialLawReview, test.questions, reviewedQuestionIds]);
 
     useEffect(() => {
         if (!isReviewMode) {
@@ -282,6 +329,16 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
             return newSet;
         });
     };
+
+    const handleToggleBookmark = (questionId: string) => {
+        if (isReviewMode || reviewedQuestionIds.has(questionId)) return;
+        setSessionBookmarkIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(questionId)) newSet.delete(questionId);
+            else newSet.add(questionId);
+            return newSet;
+        });
+    }
     
     const handleFinish = () => {
         if(timerRef.current) clearInterval(timerRef.current);
@@ -304,7 +361,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
         if (isQuantitative) {
             setCurrentIdx(index);
         } else {
-            // Scroll to the specific ref for Verbal
             const target = verbalQuestionRefs.current[index];
             if (target) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -368,26 +424,31 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
             </header>
             
             <div className="flex flex-row flex-grow overflow-hidden">
-                {/* Advanced progress Sidebar */}
+                {/* Advanced progress Sidebar with Circle Icons */}
                 <aside className="hidden lg:flex w-72 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
                     <h2 className="text-xl font-bold text-primary pb-2 border-b border-zinc-700">تقدم الاختبار</h2>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                         <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
-                            <p className="text-[10px] text-text-muted">المحلولة</p>
+                            <p className="text-[10px] text-text-muted">تم الحل</p>
                             <p className="text-lg font-bold text-green-400">{toArabic(stats.solved)}</p>
                         </div>
                         <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
-                            <p className="text-[10px] text-text-muted">المؤجلة</p>
+                            <p className="text-[10px] text-text-muted">مؤجل</p>
                             <p className="text-lg font-bold text-yellow-400">{toArabic(stats.flagged)}</p>
+                        </div>
+                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
+                            <p className="text-[10px] text-text-muted">متبقي</p>
+                            <p className="text-lg font-bold text-zinc-400">{toArabic(stats.unsolved)}</p>
                         </div>
                     </div>
 
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="grid grid-cols-5 gap-3">
                             {test.questions.map((q, idx) => {
                                 const isAnswered = userAnswers.find(a => a.questionId === q.id)?.answer;
                                 const isFlagged = sessionFlaggedIds.has(q.id) || reviewedQuestionIds.has(q.id);
+                                const isBookmarked = sessionBookmarkIds.has(q.id);
                                 const isCurrent = isQuantitative && currentIdx === idx;
 
                                 let btnClass = "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-500";
@@ -395,17 +456,19 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                     btnClass = "bg-yellow-600/40 border-yellow-500 text-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.2)]";
                                 } else if (isAnswered) {
                                     btnClass = "bg-green-600/40 border-green-500 text-green-400";
+                                } else if (isBookmarked) {
+                                    btnClass = "bg-blue-600/40 border-blue-500 text-blue-400";
                                 }
                                 
                                 if (isCurrent) {
-                                    btnClass += " ring-2 ring-primary ring-offset-2 ring-offset-bg";
+                                    btnClass += " ring-2 ring-primary ring-offset-2 ring-offset-bg scale-110";
                                 }
 
                                 return (
                                     <button 
                                         key={q.id}
                                         onClick={() => handleJumpToQuestion(idx)}
-                                        className={`w-full aspect-square flex items-center justify-center rounded-md border text-xs font-bold transition-all ${btnClass}`}
+                                        className={`w-full aspect-square flex items-center justify-center rounded-full border text-xs font-bold transition-all ${btnClass}`}
                                     >
                                         {toArabic(idx + 1)}
                                     </button>
@@ -415,16 +478,11 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                     </div>
                     
                     <div className="mt-auto space-y-2">
-                        <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                            <span className="w-2 h-2 rounded bg-green-500"></span> تم الحل
-                            <span className="w-2 h-2 rounded bg-yellow-500"></span> مؤجل
-                            <span className="w-2 h-2 rounded bg-zinc-700"></span> متبقي
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] text-text-muted">
+                            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> محلول</div>
+                            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> مؤجل</div>
+                            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-zinc-700"></span> متبقي</div>
                         </div>
-                        {!isReviewMode && (
-                            <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg text-xs text-primary font-bold text-center">
-                                اضغط على رقم السؤال للانتقال إليه مباشرة.
-                            </div>
-                        )}
                     </div>
                 </aside>
 
@@ -457,7 +515,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                         </div>
                                     )}
                                     <QuestionAccordion 
-                                        // Fix: Use a callback ref to properly assign element to the verbalQuestionRefs array at the correct index
                                         innerRef={!isQuantitative ? (el => { verbalQuestionRefs.current[originalIndex] = el; }) : undefined}
                                         question={{...q, questionText: cleanQuestion}}
                                         qNumber={originalIndex + 1}
@@ -468,6 +525,8 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                         onToggleFlag={() => handleToggleFlag(q.id)}
                                         isSpecialLaw={reviewedQuestionIds.has(q.id) || sessionSpecialLawIds.has(q.id)}
                                         onToggleSpecialLaw={() => handleToggleSpecialLaw(q.id)}
+                                        isBookmarked={sessionBookmarkIds.has(q.id)}
+                                        onToggleBookmark={() => handleToggleBookmark(q.id)}
                                         isFlagButtonDisabled={reviewedQuestionIds.has(q.id)}
                                         onShowInfo={() => setInfoModalQuestion(q as FolderQuestion)}
                                         isReviewTest={isReviewTest}
@@ -525,7 +584,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                 </main>
             </div>
 
-            {/* Custom Modal for Fullscreen Images */}
             {fullScreenImage && (
                  <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 backdrop-blur-sm cursor-zoom-out" onClick={() => setFullScreenImage(null)}>
                     <div className="w-full h-full flex items-center justify-center p-4">
@@ -534,7 +592,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                 </div>
             )}
 
-            {/* Confirmation & Info Modals (Existing) */}
             {infoModalQuestion && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setInfoModalQuestion(null)}>
                     <div className="bg-surface rounded-lg p-6 m-4 max-w-sm w-full shadow-2xl border border-border animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
