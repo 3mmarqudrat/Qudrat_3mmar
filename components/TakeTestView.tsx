@@ -76,7 +76,6 @@ const QuestionAccordion: React.FC<{
                 onClick={handleHeaderClick}
             >
                 {isQuantitative ? (
-                    /* Quantitative Layout: Right (Star), Middle (Bookmark), Left (Flag) */
                     <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between w-full border-b border-zinc-700/50 pb-3">
                             <div className="flex items-center gap-3">
@@ -125,7 +124,6 @@ const QuestionAccordion: React.FC<{
                         </div>
                     </div>
                 ) : (
-                    /* Verbal Layout: Separate Flag and Bookmark buttons */
                     <div className="flex items-center gap-4 w-full overflow-hidden">
                          <div className="flex-shrink-0 flex items-center gap-2">
                             {isReviewTest && (
@@ -208,11 +206,6 @@ const QuestionAccordion: React.FC<{
                                 </button>
                             ))}
                         </div>
-                        {isReviewMode && userAnswer === undefined && (
-                            <div className="mt-4 text-center p-3 bg-red-900/40 border border-red-700 rounded-md">
-                                <p className="font-bold text-red-400">لم يتم حل السؤال</p>
-                            </div>
-                        )}
                      </div>
                  </div>
             </div>
@@ -273,7 +266,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                 const qIndex = test.questions.findIndex(q => q.id === questionId);
                 if (question) onAddDelayedReview(question, qIndex);
             });
-            // Also treat bookmarks as delayed/review items if no specific bookmark handler exists
             sessionBookmarkIds.forEach(questionId => {
                  if (reviewedQuestionIds.has(questionId)) return;
                  const question = test.questions.find(q => q.id === questionId);
@@ -359,8 +351,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
         const solved = userAnswers.filter(a => a.answer && a.answer !== '').length;
         const total = test.questions.length;
         const flaggedCount = sessionFlaggedIds.size;
-        // Remaining is total minus (solved + unique flagged/bookmarked that are not solved)
-        // For simplicity, unsolved is just total - solved.
         return { solved, unsolved: total - solved, flagged: flaggedCount, total };
     }, [userAnswers, test.questions, sessionFlaggedIds]);
 
@@ -431,7 +421,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
             </header>
             
             <div className="flex flex-row flex-grow overflow-hidden">
-                {/* Advanced progress Sidebar with Optimized Circle Sizes */}
                 <aside className="hidden lg:flex w-64 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
                     <h2 className="text-xl font-bold text-primary pb-2 border-b border-zinc-700">تقدم الاختبار</h2>
                     
@@ -451,7 +440,7 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                     </div>
 
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
-                        <div className="grid grid-cols-5 gap-2 px-1">
+                        <div className="grid grid-cols-5 gap-y-5 gap-x-2 p-2 pt-4 pb-4">
                             {test.questions.map((q, idx) => {
                                 const isAnswered = userAnswers.find(a => a.questionId === q.id)?.answer;
                                 const isFlagged = sessionFlaggedIds.has(q.id) || reviewedQuestionIds.has(q.id);
@@ -475,7 +464,7 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                     <button 
                                         key={q.id}
                                         onClick={() => handleJumpToQuestion(idx)}
-                                        className={`w-9 h-9 flex items-center justify-center rounded-full border text-[11px] font-bold transition-all ${btnClass}`}
+                                        className={`w-10 h-10 flex items-center justify-center rounded-full border text-[11px] font-bold transition-all ${btnClass}`}
                                     >
                                         {toArabic(idx + 1)}
                                     </button>
