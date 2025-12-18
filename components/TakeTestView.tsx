@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Test, UserAnswer, TestAttempt, Question, FolderQuestion, VERBAL_BANKS, VERBAL_CATEGORIES } from '../types';
 import { ArrowRightIcon, ClockIcon, CheckCircleIcon, XCircleIcon, FlagIcon, ChevronDownIcon, InfoIcon, FileTextIcon, ZoomInIcon, StarIcon, LogOutIcon, BookOpenIcon, ArrowLeftIcon } from './Icons';
@@ -40,7 +39,9 @@ const QuestionAccordion: React.FC<{
     isReviewTest: boolean;
     isQuantitative: boolean;
     onZoomImage: (src: string) => void;
-}> = ({ question, qNumber, isReviewMode, userAnswer, onSelectAnswer, isFlagged, onToggleFlag, isSpecialLaw, onToggleSpecialLaw, isFlagButtonDisabled, onShowInfo, isReviewTest, isQuantitative, onZoomImage }) => {
+    // Fix: Change innerRef type from RefObject to Ref to support callback refs for dynamic list indexing
+    innerRef?: React.Ref<HTMLDivElement>;
+}> = ({ question, qNumber, isReviewMode, userAnswer, onSelectAnswer, isFlagged, onToggleFlag, isSpecialLaw, onToggleSpecialLaw, isFlagButtonDisabled, onShowInfo, isReviewTest, isQuantitative, onZoomImage, innerRef }) => {
     const hasAnswered = userAnswer !== undefined;
     const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -62,16 +63,12 @@ const QuestionAccordion: React.FC<{
         return 'bg-zinc-800 border-border opacity-60';
     };
 
-    const folderQuestion = question as FolderQuestion;
-    const sourceSectionName = folderQuestion.sourceSection;
-    const reviewType = folderQuestion.reviewType;
-
     const gridClass = isQuantitative 
         ? 'grid-cols-4' 
         : 'grid-cols-1 sm:grid-cols-2';
 
     return (
-        <div className={`bg-surface rounded-lg border border-border overflow-hidden transition-all ${isQuantitative ? 'shadow-2xl' : ''}`}>
+        <div ref={innerRef} className={`bg-surface rounded-lg border border-border overflow-hidden transition-all ${isQuantitative ? 'shadow-2xl' : ''}`}>
             <div 
                 className={`flex justify-between items-center p-4 ${(!isQuantitative && (hasAnswered || isReviewMode)) ? 'cursor-pointer' : 'cursor-default'}`}
                 onClick={handleHeaderClick}
@@ -103,7 +100,7 @@ const QuestionAccordion: React.FC<{
                                      <span className="break-words w-full">
                                         <span className="text-text-muted select-none">{toArabic(qNumber)}. </span>
                                         {question.questionText}
-                                    </span>
+                                     </span>
                                 </div>
                                 {isReviewMode && (
                                     <div className="mt-1 flex flex-wrap gap-4 items-center">
@@ -171,11 +168,6 @@ const QuestionAccordion: React.FC<{
                                 </button>
                             ))}
                         </div>
-                        {isReviewMode && userAnswer === undefined && (
-                            <div className="mt-4 text-center p-3 bg-red-900/40 border border-red-700 rounded-md">
-                                <p className="font-bold text-red-400">لم يتم حل السؤال</p>
-                            </div>
-                        )}
                      </div>
                  </div>
             </div>
@@ -210,6 +202,9 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
     const [currentIdx, setCurrentIdx] = useState(0);
     const timerRef = useRef<number | null>(null);
     const [showExitConfirm, setShowExitConfirm] = useState(false);
+    
+    // Refs for scrolling to Verbal questions
+    const verbalQuestionRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const isReviewTest = test.id.includes('review_');
     const isQuantitative = useMemo(() => {
@@ -298,28 +293,24 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
         if (onBack) onBack();
     };
 
-    const reviewSummary = useMemo(() => {
-        if (!isReviewMode || !reviewAttempt) return { all: 0, correct: 0, incorrect: 0, unanswered: 0 };
-        const answersMap = new Map(reviewAttempt.answers.map(a => [a.questionId, a.answer]));
-        let correctCount = 0;
-        let incorrectCount = 0;
-        reviewAttempt.questions.forEach(q => {
-            const userAnswer = answersMap.get(q.id);
-            if (userAnswer !== undefined && userAnswer !== '') {
-                if (userAnswer === q.correctAnswer) correctCount++;
-                else incorrectCount++;
-            }
-        });
-        const unansweredCount = reviewAttempt.totalQuestions - (correctCount + incorrectCount);
-        return { all: reviewAttempt.totalQuestions, correct: correctCount, incorrect: incorrectCount, unanswered: unansweredCount };
-    }, [isReviewMode, reviewAttempt]);
-
     const stats = useMemo(() => {
         const solved = userAnswers.filter(a => a.answer && a.answer !== '').length;
         const total = test.questions.length;
-        const flagged = sessionFlaggedIds.size;
-        return { solved, unsolved: total - solved, flagged, total };
+        const flaggedCount = sessionFlaggedIds.size;
+        return { solved, unsolved: total - solved, flagged: flaggedCount, total };
     }, [userAnswers, test.questions, sessionFlaggedIds]);
+
+    const handleJumpToQuestion = (index: number) => {
+        if (isQuantitative) {
+            setCurrentIdx(index);
+        } else {
+            // Scroll to the specific ref for Verbal
+            const target = verbalQuestionRefs.current[index];
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    };
 
     const filteredQuestions = useMemo(() => {
         if (!isReviewMode || reviewFilter === 'all' || !reviewAttempt) return test.questions;
@@ -366,22 +357,6 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                         </button>
                         <h1 className="text-lg md:text-xl font-bold text-text truncate max-w-[200px] md:max-w-md text-right" title={test.name}>{isReviewMode ? `مراجعة: ${test.name}` : test.name}</h1>
                     </div>
-                    {isReviewMode && (
-                        <div className="hidden md:flex flex-wrap justify-center items-center gap-2 bg-black/40 p-1 rounded-lg border border-zinc-700/50 backdrop-blur-sm">
-                            <button onClick={() => setReviewFilter('all')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${reviewFilter === 'all' ? 'bg-zinc-100 text-black shadow-lg' : 'text-zinc-300 hover:bg-white/10'}`}>
-                                الكل ({toArabic(reviewSummary.all)})
-                            </button>
-                            <button onClick={() => setReviewFilter('correct')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${reviewFilter === 'correct' ? 'bg-green-500 text-white shadow-lg' : 'text-zinc-300 hover:bg-white/10'}`}>
-                                الصحيحة ({toArabic(reviewSummary.correct)})
-                            </button>
-                            <button onClick={() => setReviewFilter('incorrect')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${reviewFilter === 'incorrect' ? 'bg-red-500 text-white shadow-lg' : 'text-zinc-300 hover:bg-white/10'}`}>
-                                الخاطئة ({toArabic(reviewSummary.incorrect)})
-                            </button>
-                            <button onClick={() => setReviewFilter('unanswered')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${reviewFilter === 'unanswered' ? 'bg-yellow-500 text-white shadow-lg' : 'text-zinc-300 hover:bg-white/10'}`}>
-                                المتروكة ({toArabic(reviewSummary.unanswered)})
-                            </button>
-                        </div>
-                    )}
                     <div className="flex items-center justify-end gap-3">
                         {!isReviewMode && (
                              <div className="font-mono text-xl text-cyan-400 bg-black/40 px-3 py-1.5 rounded-lg border border-cyan-500/30 shadow-[0_0_15px_-3px_rgba(6,182,212,0.3)] flex items-center gap-2">
@@ -393,45 +368,61 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
             </header>
             
             <div className="flex flex-row flex-grow overflow-hidden">
-                {/* Stats Sidebar */}
-                <aside className="hidden lg:flex w-64 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
+                {/* Advanced progress Sidebar */}
+                <aside className="hidden lg:flex w-72 border-l border-border bg-surface/50 p-4 flex-col gap-6 flex-shrink-0 animate-in slide-in-from-right duration-300">
                     <h2 className="text-xl font-bold text-primary pb-2 border-b border-zinc-700">تقدم الاختبار</h2>
                     
-                    <div className="space-y-4">
-                        <div className="bg-zinc-800/80 p-3 rounded-lg border border-zinc-700 shadow-sm transition-transform hover:scale-[1.02]">
-                            <p className="text-xs text-text-muted mb-1">الأسئلة المحلولة</p>
-                            <div className="flex justify-between items-baseline">
-                                <span className="text-2xl font-bold text-green-400">{toArabic(stats.solved)}</span>
-                                <span className="text-sm text-zinc-500">من {toArabic(stats.total)}</span>
-                            </div>
-                            <div className="w-full bg-zinc-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                                <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${(stats.solved / stats.total) * 100}%` }}></div>
-                            </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
+                            <p className="text-[10px] text-text-muted">المحلولة</p>
+                            <p className="text-lg font-bold text-green-400">{toArabic(stats.solved)}</p>
                         </div>
-
-                        <div className="bg-zinc-800/80 p-3 rounded-lg border border-zinc-700 shadow-sm transition-transform hover:scale-[1.02]">
-                            <p className="text-xs text-text-muted mb-1">الأسئلة غير المحلولة</p>
-                            <p className="text-2xl font-bold text-red-400">{toArabic(stats.unsolved)}</p>
+                        <div className="bg-zinc-800 p-2 rounded border border-zinc-700 text-center">
+                            <p className="text-[10px] text-text-muted">المؤجلة</p>
+                            <p className="text-lg font-bold text-yellow-400">{toArabic(stats.flagged)}</p>
                         </div>
+                    </div>
 
-                        <div className="bg-zinc-800/80 p-3 rounded-lg border border-zinc-700 shadow-sm transition-transform hover:scale-[1.02]">
-                            <p className="text-xs text-text-muted mb-1">الأسئلة المؤجلة</p>
-                            <div className="flex items-center gap-2">
-                                <FlagIcon className="w-5 h-5 text-yellow-500 fill-current" />
-                                <span className="text-2xl font-bold text-yellow-400">{toArabic(stats.flagged)}</span>
-                            </div>
+                    <div className="flex-grow overflow-y-auto custom-scrollbar">
+                        <div className="grid grid-cols-5 gap-2">
+                            {test.questions.map((q, idx) => {
+                                const isAnswered = userAnswers.find(a => a.questionId === q.id)?.answer;
+                                const isFlagged = sessionFlaggedIds.has(q.id) || reviewedQuestionIds.has(q.id);
+                                const isCurrent = isQuantitative && currentIdx === idx;
+
+                                let btnClass = "bg-zinc-800 border-zinc-700 text-zinc-500 hover:border-zinc-500";
+                                if (isFlagged) {
+                                    btnClass = "bg-yellow-600/40 border-yellow-500 text-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.2)]";
+                                } else if (isAnswered) {
+                                    btnClass = "bg-green-600/40 border-green-500 text-green-400";
+                                }
+                                
+                                if (isCurrent) {
+                                    btnClass += " ring-2 ring-primary ring-offset-2 ring-offset-bg";
+                                }
+
+                                return (
+                                    <button 
+                                        key={q.id}
+                                        onClick={() => handleJumpToQuestion(idx)}
+                                        className={`w-full aspect-square flex items-center justify-center rounded-md border text-xs font-bold transition-all ${btnClass}`}
+                                    >
+                                        {toArabic(idx + 1)}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                     
-                    <div className="mt-auto space-y-4">
-                        {!isReviewMode && !isQuantitative && (
+                    <div className="mt-auto space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                            <span className="w-2 h-2 rounded bg-green-500"></span> تم الحل
+                            <span className="w-2 h-2 rounded bg-yellow-500"></span> مؤجل
+                            <span className="w-2 h-2 rounded bg-zinc-700"></span> متبقي
+                        </div>
+                        {!isReviewMode && (
                             <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg text-xs text-primary font-bold text-center">
-                                يمكنك الضغط على العلم بجانب السؤال لتأجيله للمراجعة لاحقاً.
-                            </div>
-                        )}
-                        {isQuantitative && !isReviewMode && (
-                             <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg text-xs text-accent font-bold text-center">
-                                الأسئلة تظهر منفصلة. استخدم زر "التالي" للتنقل.
+                                اضغط على رقم السؤال للانتقال إليه مباشرة.
                             </div>
                         )}
                     </div>
@@ -450,7 +441,10 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                 passageNumber = uniquePassages.indexOf(passage) + 1;
                             }
                             return (
-                                <div key={q.id} className="animate-in fade-in zoom-in duration-300">
+                                <div 
+                                    key={q.id} 
+                                    className="animate-in fade-in zoom-in duration-300"
+                                >
                                     {showPassage && (
                                         <div className="mb-6 mt-2 p-5 bg-zinc-800/80 rounded-lg border-r-4 border-primary shadow-md">
                                             <h3 className="text-primary font-bold mb-3 flex items-center gap-2 text-lg border-b border-zinc-700 pb-2">
@@ -463,6 +457,8 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                         </div>
                                     )}
                                     <QuestionAccordion 
+                                        // Fix: Use a callback ref to properly assign element to the verbalQuestionRefs array at the correct index
+                                        innerRef={!isQuantitative ? (el => { verbalQuestionRefs.current[originalIndex] = el; }) : undefined}
                                         question={{...q, questionText: cleanQuestion}}
                                         qNumber={originalIndex + 1}
                                         isReviewMode={isReviewMode}
@@ -525,32 +521,21 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                                 </button>
                             </div>
                         )}
-                        
-                        {filteredQuestions.length === 0 && !isQuantitative && (
-                            <div className="text-center text-text-muted py-24">
-                                <p className="text-xl">لا توجد أسئلة تطابق هذا الفلتر.</p>
-                            </div>
-                        )}
                     </div>
                 </main>
             </div>
 
-            {isReviewMode && (
-                <footer className="bg-surface/90 backdrop-blur-xl p-4 sticky bottom-0 z-20 border-t border-border mt-auto shadow-2xl">
-                    <div className="container mx-auto flex justify-center items-center gap-6">
-                         <button onClick={onBackToSummary} className="px-8 py-2.5 bg-blue-600 text-white font-bold rounded-lg transition-all flex items-center gap-2 transform hover:scale-105 shadow-lg shadow-blue-500/20 hover:bg-blue-500">
-                             <FileTextIcon className="w-5 h-5"/>
-                             <span>عرض النتائج</span>
-                         </button>
-                         <button onClick={onBackToSection} className="px-8 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-500 transition-colors flex items-center gap-2 shadow-lg shadow-red-500/20">
-                             <LogOutIcon className="w-5 h-5"/>
-                             <span>المغادرة</span>
-                         </button>
+            {/* Custom Modal for Fullscreen Images */}
+            {fullScreenImage && (
+                 <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 backdrop-blur-sm cursor-zoom-out" onClick={() => setFullScreenImage(null)}>
+                    <div className="w-full h-full flex items-center justify-center p-4">
+                         <img src={fullScreenImage} alt="Full Screen Question" className="max-w-full max-h-full object-contain animate-in zoom-in duration-300" />
                     </div>
-                </footer>
+                </div>
             )}
-            
-             {infoModalQuestion && (
+
+            {/* Confirmation & Info Modals (Existing) */}
+            {infoModalQuestion && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setInfoModalQuestion(null)}>
                     <div className="bg-surface rounded-lg p-6 m-4 max-w-sm w-full shadow-2xl border border-border animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold mb-4 text-primary">مصدر السؤال</h3>
@@ -558,18 +543,8 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                             <p><strong className="text-text-muted">البنك:</strong> {infoModalQuestion.sourceBank || 'غير محدد'}</p>
                             <p><strong className="text-text-muted">القسم:</strong> {infoModalQuestion.sourceSection || 'غير محدد'}</p>
                             <p><strong className="text-text-muted">الاختبار الأصلي:</strong> {infoModalQuestion.sourceTest || 'غير محدد'}</p>
-                            <p><strong className="text-text-muted">رقم السؤال الأصلي:</strong> {infoModalQuestion.originalQuestionIndex !== undefined ? toArabic(infoModalQuestion.originalQuestionIndex + 1) : 'غير محدد'}</p>
-                            <p><strong className="text-text-muted">تاريخ الإضافة للمراجعة:</strong> {infoModalQuestion.addedDate ? new Date(infoModalQuestion.addedDate).toLocaleString('ar-SA') : 'غير محدد'}</p>
                         </div>
                          <button onClick={() => setInfoModalQuestion(null)} className="mt-6 w-full px-4 py-2 bg-zinc-600 rounded-md hover:bg-zinc-500 transition-colors font-semibold">إغلاق</button>
-                    </div>
-                </div>
-            )}
-            
-            {fullScreenImage && (
-                 <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 backdrop-blur-sm cursor-zoom-out" onClick={() => setFullScreenImage(null)}>
-                    <div className="w-full h-full flex items-center justify-center p-4">
-                         <img src={fullScreenImage} alt="Full Screen Question" className="max-w-full max-h-full object-contain animate-in zoom-in duration-300" />
                     </div>
                 </div>
             )}
