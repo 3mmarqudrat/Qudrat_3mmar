@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Test, UserAnswer, TestAttempt, Question, FolderQuestion, VERBAL_BANKS, VERBAL_CATEGORIES } from '../types';
 import { ArrowRightIcon, ClockIcon, CheckCircleIcon, XCircleIcon, FlagIcon, ChevronDownIcon, InfoIcon, FileTextIcon, ZoomInIcon, StarIcon, LogOutIcon, BookOpenIcon, ArrowLeftIcon, BookmarkIcon } from './Icons';
@@ -109,11 +108,6 @@ const QuestionAccordion: React.FC<{
                                         title="تأجيل السؤال"
                                     >
                                         <FlagIcon className={`w-6 h-6 ${isFlagged ? 'text-yellow-400 fill-current' : 'text-text-muted'}`} />
-                                    </button>
-                                )}
-                                {isReviewTest && (
-                                    <button onClick={(e) => { e.stopPropagation(); onShowInfo(); }} className="p-2 rounded-full hover:bg-zinc-600 transition-colors" title="معلومات السؤال">
-                                        <InfoIcon className="w-6 h-6 text-sky-400"/>
                                     </button>
                                 )}
                             </div>
@@ -440,7 +434,7 @@ export const TakeTestView: React.FC<TakeTestViewProps> = ({ test, onFinishTest, 
                     </div>
 
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
-                        <div className="grid grid-cols-5 gap-y-5 gap-x-2 p-2 pt-4 pb-4">
+                        <div className="grid grid-cols-5 gap-y-6 gap-x-2 px-1 pt-4 pb-4">
                             {test.questions.map((q, idx) => {
                                 const isAnswered = userAnswers.find(a => a.questionId === q.id)?.answer;
                                 const isFlagged = sessionFlaggedIds.has(q.id) || reviewedQuestionIds.has(q.id);

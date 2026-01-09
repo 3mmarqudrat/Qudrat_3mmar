@@ -1,5 +1,3 @@
-
-
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -22,20 +20,17 @@ export class RegistrationError extends Error {
 // Map Firebase User to App User
 const mapUser = (fbUser: FirebaseUser, additionalData?: any): User => ({
     uid: fbUser.uid,
-    email: fbUser.email?.replace('+dev_priv', '') || '', // Strip internal suffix for display
+    email: fbUser.email?.replace('+dev_priv', '') || '', 
     username: additionalData?.username || fbUser.displayName || 'User',
-    password: additionalData?.password || '', // Retrieve stored password for Admin view
+    password: additionalData?.password || '', 
     isDeveloper: additionalData?.isDeveloper || false,
     registrationDate: fbUser.metadata.creationTime,
     loginHistory: additionalData?.loginHistory || []
 });
 
 const DEV_EMAIL_KEY = 'qudrat_dev_email';
-// كلمة مرور داخلية لتجاوز شرط الـ 6 أحرف الخاص بـ Firebase
 const DEV_SECURE_PASSWORD = '...dev_secure'; 
 
-// Helper function to insert suffix correctly BEFORE the @ symbol
-// Example: user@gmail.com -> user+dev_priv@gmail.com
 const toDevEmail = (email: string): string => {
     const atIndex = email.lastIndexOf('@');
     if (atIndex === -1) return email; 
@@ -45,28 +40,35 @@ const toDevEmail = (email: string): string => {
 export const authService = {
     login: async (email: string, password: string): Promise<User> => {
         try {
-            // الدخول للمستخدم العادي (بيانات عادية)
+            // التحقق من أن كلمة المرور ليست كلمة مرور المطور السرية لمنع التداخل
+            if (password === '...') {
+                throw new Error('يرجى استخدام نموذج دخول المطور');
+            }
+
             const cred = await signInWithEmailAndPassword(auth, email, password);
             const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
-            
-            // Track Login - Fire and Forget (don't await) to speed up UI transition
+            const userData = userDoc.exists() ? userDoc.data() : {};
+
+            // تحديث سجل النشاط
             const now = new Date().toISOString();
             updateDoc(doc(db, 'users', cred.user.uid), {
                 loginHistory: arrayUnion({
                     loginTime: now,
                     logoutTime: null,
-                    lastActive: now // Initialize last active
+                    lastActive: now 
                 } as LoginRecord)
-            }).catch(e => console.error("Login history update failed", e));
+            }).catch(() => {});
 
-            return mapUser(cred.user, userDoc.exists() ? userDoc.data() : {});
+            return mapUser(cred.user, userData);
         } catch (error: any) {
-            console.error("Login Error:", error);
-            throw new Error('بيانات الدخول غير صحيحة');
+            console.error("Standard Login Error:", error);
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+            }
+            throw new Error('حدث خطأ أثناء تسجيل الدخول');
         }
     },
 
-    // دالة دخول المطور السرية
     loginDeveloper: async (inputEmail?: string): Promise<User> => {
         let emailToUse = inputEmail?.trim();
         
@@ -75,14 +77,23 @@ export const authService = {
         }
 
         if (!emailToUse) {
-            throw new Error("البريد الإلكتروني مطلوب.");
+            throw new Error("البريد الإلكتروني للمطور مطلوب.");
         }
         
         try {
             const targetEmail = toDevEmail(emailToUse);
-            
+            // تسجيل الدخول بكلمة المرور الثابتة الخاصة بالمطورين
             const cred = await signInWithEmailAndPassword(auth, targetEmail, DEV_SECURE_PASSWORD);
-            const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+            
+            let devData = { isDeveloper: true };
+            try {
+                const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+                if (userDoc.exists()) {
+                    devData = { ...userDoc.data(), isDeveloper: true } as any;
+                }
+            } catch (e: any) {
+                if (e.code !== 'permission-denied') console.error("Dev doc fetch error", e);
+            }
             
             localStorage.setItem(DEV_EMAIL_KEY, emailToUse);
 
@@ -93,13 +104,13 @@ export const authService = {
                     logoutTime: null,
                     lastActive: now
                 } as LoginRecord)
-            }).catch(e => {});
+            }).catch(() => {});
 
-            return mapUser(cred.user, userDoc.exists() ? userDoc.data() : { isDeveloper: true });
+            return mapUser(cred.user, devData);
 
         } catch (error: any) {
             console.error("Dev Login Error:", error);
-            throw new Error("بيانات الدخول غير صحيحة.");
+            throw new Error("بيانات دخول المطور غير صحيحة أو الحساب غير موجود.");
         }
     },
 
@@ -121,7 +132,7 @@ export const authService = {
             const newUser = {
                 username,
                 email,
-                password, // Store password for admin view (Note: Not recommended for production security, but requested)
+                password, // يتم حفظها في Firestore للمعاينة من قبل الإدارة فقط
                 isDeveloper: false,
                 registrationDate: new Date().toISOString(),
                 loginHistory: []
@@ -143,7 +154,6 @@ export const authService = {
         
         try {
             const devEmail = toDevEmail(email);
-            
             const cred = await createUserWithEmailAndPassword(auth, devEmail, DEV_SECURE_PASSWORD);
             await updateProfile(cred.user, { displayName: 'المطور' });
             
@@ -156,23 +166,17 @@ export const authService = {
             };
             
             await setDoc(doc(db, 'users', cred.user.uid), devUser);
-            
             localStorage.setItem(DEV_EMAIL_KEY, email);
-            
             return mapUser(cred.user, devUser);
         } catch (error: any) {
              console.error("Dev Registration Error:", error);
             if (error.code === 'auth/email-already-in-use') {
-                 throw new RegistrationError('حساب المطور لهذا البريد موجود بالفعل. حاول تسجيل الدخول.');
-            }
-            if (error.code === 'auth/invalid-email') {
-                throw new RegistrationError('البريد الإلكتروني غير صالح.');
+                 throw new RegistrationError('حساب المطور لهذا البريد موجود بالفعل.');
             }
             throw new RegistrationError('حدث خطأ أثناء إنشاء حساب المطور.');
         }
     },
     
-    // Heartbeat function to update "lastActive" continuously
     sendHeartbeat: async (uid: string) => {
         try {
             const userRef = doc(db, 'users', uid);
@@ -184,15 +188,14 @@ export const authService = {
                 
                 if (history.length > 0) {
                     const lastEntry = history[history.length - 1];
-                    // Only update if not already logged out
                     if (!lastEntry.logoutTime) {
                         lastEntry.lastActive = new Date().toISOString();
                         await updateDoc(userRef, { loginHistory: history });
                     }
                 }
             }
-        } catch (e) {
-            console.error("Heartbeat error:", e);
+        } catch (e: any) {
+            if (e.code !== 'permission-denied') console.error("Heartbeat error:", e);
         }
     },
 
@@ -200,7 +203,6 @@ export const authService = {
         const currentUser = auth.currentUser;
         if (currentUser) {
             try {
-                // Fetch current user data to get the login history
                 const userRef = doc(db, 'users', currentUser.uid);
                 const userDoc = await getDoc(userRef);
                 
@@ -209,19 +211,17 @@ export const authService = {
                     const history = data.loginHistory || [];
                     
                     if (history.length > 0) {
-                        // Update the last entry with logout time AND lastActive
                         const lastEntry = history[history.length - 1];
                         if (lastEntry && !lastEntry.logoutTime) {
                             const now = new Date().toISOString();
                             lastEntry.logoutTime = now;
                             lastEntry.lastActive = now;
-                            // Update the entire history array
                             await updateDoc(userRef, { loginHistory: history });
                         }
                     }
                 }
-            } catch (e) {
-                console.error("Error recording logout time:", e);
+            } catch (e: any) {
+                if (e.code !== 'permission-denied') console.error("Error recording logout time:", e);
             }
         }
         await signOut(auth);
@@ -232,23 +232,29 @@ export const authService = {
             if (fbUser) {
                  try {
                      const userDocRef = doc(db, 'users', fbUser.uid);
-                     const userDoc = await getDoc(userDocRef);
+                     let userData = null;
+                     try {
+                         const userDoc = await getDoc(userDocRef);
+                         if (userDoc.exists()) userData = userDoc.data();
+                     } catch (e: any) {
+                         if (e.code !== 'permission-denied') throw e;
+                     }
                      
-                     if (userDoc.exists()) {
-                         callback(mapUser(fbUser, userDoc.data()));
+                     if (userData) {
+                         callback(mapUser(fbUser, userData));
                      } else {
+                         // في حال عدم وجود وثيقة في Firestore، ننشئ مستخدم افتراضي
                          const newUser = {
                              username: fbUser.displayName || 'User',
                              email: fbUser.email?.replace('+dev_priv', '') || '',
-                             isDeveloper: false,
+                             isDeveloper: fbUser.email?.includes('+dev_priv') || false,
                              registrationDate: fbUser.metadata.creationTime,
                              loginHistory: []
                          };
-                         await setDoc(userDocRef, newUser);
                          callback(mapUser(fbUser, newUser));
                      }
                  } catch (e) {
-                     console.error("Error fetching user data", e);
+                     console.error("Error fetching user data in auth change", e);
                      callback(null);
                  }
             } else {
@@ -264,8 +270,8 @@ export const authService = {
                 key: docSnap.id,
                 user: { uid: docSnap.id, ...docSnap.data() } as User
             }));
-        } catch (e) {
-            console.error("Error getting users", e);
+        } catch (e: any) {
+            if (e.code !== 'permission-denied') console.error("Error getting users", e);
             return [];
         }
     },
@@ -273,8 +279,8 @@ export const authService = {
     deleteUser: async (userKey: string): Promise<void> => {
         try {
             await deleteDoc(doc(db, 'users', userKey));
-        } catch(e) { 
-            console.error("Error deleting user profile:", e); 
+        } catch(e: any) { 
+            if (e.code !== 'permission-denied') console.error("Error deleting user profile:", e); 
         }
     },
 };

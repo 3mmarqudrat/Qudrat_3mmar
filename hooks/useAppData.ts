@@ -1,5 +1,4 @@
 
-// ... (keeping existing imports)
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppData, Test, Section, Question, TestAttempt, Folder, VerbalTests, VERBAL_BANKS, VERBAL_CATEGORIES, FolderQuestion } from '../types';
 import { AppSettings } from '../services/settingsService'; 
@@ -39,19 +38,13 @@ export const getInitialData = (): AppData => ({
 });
 
 export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewMode: boolean) => {
-  // 1. Global State (Tests) - Fetched from 'globalTests' collection
   const [globalTests, setGlobalTests] = useState<AppData['tests']>({
     quantitative: [],
     verbal: initialVerbalTests,
   });
 
-  // New State: Questions from subcollections (Loaded On-Demand Only)
   const [subcollectionQuestions, setSubcollectionQuestions] = useState<Record<string, Question[]>>({});
-  
-  // 2. Global Settings
   const [settings, setSettings] = useState<AppSettings>(defaultGlobalSettings);
-
-  // 3. User Specific State
   const [userData, setUserData] = useState<Omit<AppData, 'tests'>>({
       folders: getInitialData().folders,
       history: [],
@@ -61,21 +54,26 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
   
   const [isLoading, setIsLoading] = useState(true);
   
-  // LOAD GLOBAL TESTS (Real-time Collection Listener) - Metadata Only
+  // LOAD GLOBAL TESTS - Only if user is logged in
   useEffect(() => {
+    if (!userId) {
+      setGlobalTests({
+        quantitative: [],
+        verbal: JSON.parse(JSON.stringify(initialVerbalTests))
+      });
+      return;
+    }
+
     const q = query(collection(db, 'globalTests'));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const newTestsStructure: AppData['tests'] = {
             quantitative: [],
-            verbal: JSON.parse(JSON.stringify(initialVerbalTests)) // Deep copy initial structure
+            verbal: JSON.parse(JSON.stringify(initialVerbalTests))
         };
 
         querySnapshot.forEach((doc) => {
             const testData = { id: doc.id, ...doc.data() } as any;
-            
-            // Ensure questions array exists but might be empty if fetched from subcollection later
             if (!testData.questions) testData.questions = [];
-
             if (testData.section === 'quantitative') {
                 newTestsStructure.quantitative.push(testData);
             } else if (testData.section === 'verbal') {
@@ -85,31 +83,35 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
                 }
             }
         });
-
         setGlobalTests(newTestsStructure);
     }, (error) => {
-        console.error("Error fetching global tests:", error);
+        if (error.code !== 'permission-denied') {
+            console.error("Error fetching global tests:", error);
+        }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userId]);
 
-  // PERFORMANCE FIX: Removed the global collectionGroup listener for questions.
-  // Instead, we fetch questions only when needed using fetchTestQuestions.
-
-  // Load Global Settings
+  // Load Global Settings - Only if user is logged in
   useEffect(() => {
+    if (!userId) return;
+
     const settingsUnsub = onSnapshot(doc(db, 'globalContent', 'settings'), (docSnap) => {
         if (docSnap.exists()) {
             setSettings(docSnap.data() as AppSettings);
         } else {
             setSettings(defaultGlobalSettings);
         }
+    }, (error) => {
+        if (error.code !== 'permission-denied') {
+            console.error("Settings listener error:", error);
+        }
     });
     return () => settingsUnsub();
-  }, []);
+  }, [userId]);
 
-  // Load User Data
+  // Load User Data - Ensure ref is valid and user is logged in
   useEffect(() => {
     if (!userId) {
         setUserData({
@@ -123,7 +125,7 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     }
 
     setIsLoading(true);
-    const docRef = doc(db, 'userData', userId);
+    const docRef = doc(db, 'users', userId);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             const loaded = docSnap.data();
@@ -133,78 +135,57 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
                 reviewTests: loaded.reviewTests || { quantitative: [], verbal: [] },
                 reviewedQuestionIds: loaded.reviewedQuestionIds || {}
             });
+        } else {
+            // New user case or doc not created yet
+            setUserData({
+                folders: getInitialData().folders,
+                history: [],
+                reviewTests: { quantitative: [], verbal: [] },
+                reviewedQuestionIds: {}
+            });
         }
         setIsLoading(false);
     }, (error) => {
-        console.error("Error loading user data:", error);
+        if (error.code !== 'permission-denied') {
+            console.error("Error loading user data:", error);
+        }
         setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, [userId]);
 
-  // ON-DEMAND FETCH FUNCTION
   const fetchTestQuestions = useCallback(async (testId: string) => {
-      // Check if already loaded
       if (subcollectionQuestions[testId]) return;
-
       try {
           const qColl = collection(db, 'globalTests', testId, 'questions');
           const qSnap = await getDocs(qColl);
           const questions = qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
-          
-          setSubcollectionQuestions(prev => ({
-              ...prev,
-              [testId]: questions
-          }));
+          setSubcollectionQuestions(prev => ({ ...prev, [testId]: questions }));
       } catch (e) {
           console.error(`Error fetching questions for test ${testId}:`, e);
       }
   }, [subcollectionQuestions]);
 
   const data: AppData = useMemo(() => {
-      // Deep clone globalTests to avoid mutation
       const mergedTests = JSON.parse(JSON.stringify(globalTests));
-      
-      // Helper function to merge questions
       const mergeQuestionsForTest = (test: Test) => {
-          // Check if we have loaded questions on-demand
           const extraQuestions = subcollectionQuestions[test.id] || [];
-          
           const qMap = new Map();
-          (test.questions || []).forEach(q => qMap.set(q.id, q)); // Legacy array questions
-          extraQuestions.forEach(q => qMap.set(q.id, q)); // Subcollection questions
-          
+          (test.questions || []).forEach(q => qMap.set(q.id, q));
+          extraQuestions.forEach(q => qMap.set(q.id, q));
           test.questions = Array.from(qMap.values());
-          
-          // Sort by order field if available, fallback to index
-          test.questions.sort((a: Question, b: Question) => {
-             if (a.order !== undefined && b.order !== undefined) {
-                 return a.order - b.order;
-             }
-             return 0; 
-          });
+          test.questions.sort((a: Question, b: Question) => (a.order || 0) - (b.order || 0));
       };
-
-      // Merge Quantitative
       mergedTests.quantitative.forEach((test: Test) => mergeQuestionsForTest(test));
-
-      // Merge Verbal
       Object.keys(mergedTests.verbal).forEach(bank => {
           Object.keys(mergedTests.verbal[bank]).forEach(cat => {
               mergedTests.verbal[bank][cat].forEach((test: Test) => mergeQuestionsForTest(test));
           });
       });
-
-      return {
-          tests: mergedTests,
-          ...userData
-      };
+      return { tests: mergedTests, ...userData };
   }, [globalTests, userData, subcollectionQuestions]);
 
-  // --- ACTIONS (Now using Collection-based logic) ---
-
-  // Update Global Settings
   const updateGlobalSettings = async (newSettings: AppSettings) => {
       if (!isDevUser && !isPreviewMode) return; 
       setSettings(newSettings);
@@ -221,94 +202,67 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
       updater(newData);
       setUserData(newData);
       try {
-          await setDoc(doc(db, 'userData', userId), newData, { merge: true });
+          await setDoc(doc(db, 'users', userId), newData, { merge: true });
       } catch (e) {
           console.error("Failed to save user data:", e);
       }
   };
 
-  // 1. ADD TEST (Creates a new Document)
   const addTest = (section: Section, testName: string, bankKey?: string, categoryKey?: string, sourceText?: string) => {
     if (!isDevUser) return '';
-    
     const testId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newTest: any = {
       id: testId,
       name: testName,
-      questions: [], // Legacy array kept empty for new tests
+      questions: [],
       section,
       createdAt: new Date().toISOString()
     };
-
     if (sourceText) newTest.sourceText = sourceText;
     if (bankKey) newTest.bankKey = bankKey;
     if (categoryKey) newTest.categoryKey = categoryKey;
-
-    // Fire and forget (Optimistic updates handled by onSnapshot listener)
     setDoc(doc(db, 'globalTests', testId), newTest).catch(e => console.error("Add Test Failed:", e));
-    
     return testId;
   };
 
-  // 2. ADD QUESTIONS (Updates specific Document or Subcollection)
   const addQuestionsToTest = async (section: Section, testId: string, newQuestions: Omit<Question, 'id'>[], bankKey?: string, categoryKey?: string) => {
     if (!isDevUser) return;
-    
     try {
         const batch = writeBatch(db);
         const questionsRef = collection(db, 'globalTests', testId, 'questions');
-        
         const addedQuestions: Question[] = [];
-
         newQuestions.forEach(q => {
              const newDocRef = doc(questionsRef); 
-             // Ensure ID and Order are set
              const questionWithId = { ...q, id: newDocRef.id };
              batch.set(newDocRef, questionWithId);
              addedQuestions.push(questionWithId as Question);
         });
-        
         await batch.commit();
-
-        // Update local state immediately to reflect changes without reload
         setSubcollectionQuestions(prev => ({
             ...prev,
             [testId]: [...(prev[testId] || []), ...addedQuestions]
         }));
-
     } catch (e) {
         console.error("Add Questions Failed:", e);
     }
   };
   
-  // 3. UPDATE ANSWER
   const updateQuestionAnswer = async (section: Section, testId: string, questionId: string, newAnswer: string, bankKey?: string, categoryKey?: string) => {
       if (!isDevUser) return;
-      
       try {
-          // Determine if question is legacy (in array) or new (in subcollection)
           const testRef = doc(db, 'globalTests', testId);
           const testSnap = await getDoc(testRef);
-          
           if (testSnap.exists()) {
               const testData = testSnap.data();
               const legacyIndex = testData.questions?.findIndex((q: Question) => q.id === questionId);
-              
               if (legacyIndex !== undefined && legacyIndex > -1) {
-                  // Update Legacy Array
                   const updatedQuestions = [...testData.questions];
                   updatedQuestions[legacyIndex].correctAnswer = newAnswer;
-                  updatedQuestions[legacyIndex].isEdited = true; // Mark as edited
+                  updatedQuestions[legacyIndex].isEdited = true;
                   await updateDoc(testRef, { questions: updatedQuestions });
               } else {
-                  // Update Subcollection Document
                   const qRef = doc(db, 'globalTests', testId, 'questions', questionId);
-                  await updateDoc(qRef, { 
-                      correctAnswer: newAnswer,
-                      isEdited: true // Mark as edited
-                  });
-
-                  // Update local state
+                  await updateDoc(qRef, { correctAnswer: newAnswer, isEdited: true });
                   setSubcollectionQuestions(prev => ({
                       ...prev,
                       [testId]: (prev[testId] || []).map(q => q.id === questionId ? { ...q, correctAnswer: newAnswer, isEdited: true } : q)
@@ -320,31 +274,18 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
       }
   };
   
-  // 4. DELETE TEST
   const deleteTest = async (section: Section, testId: string, bankKey?: string, categoryKey?: string) => {
     try {
-        // 1. Get all subcollection questions first
         const qColl = collection(db, 'globalTests', testId, 'questions');
         const qSnap = await getDocs(qColl);
-        
-        // 2. Batch delete questions (Optimized)
         const BATCH_SIZE = 15;
-        const batchPromises = [];
-
         for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
             const chunk = qSnap.docs.slice(i, i + BATCH_SIZE);
             const batch = writeBatch(db);
             chunk.forEach(doc => batch.delete(doc.ref));
-            batchPromises.push(batch.commit());
+            await batch.commit();
         }
-
-        // Execute all batches in parallel
-        await Promise.all(batchPromises);
-        
-        // 3. Delete test document
         await deleteDoc(doc(db, 'globalTests', testId));
-
-        // Update local state
         setSubcollectionQuestions(prev => {
             const newState = { ...prev };
             delete newState[testId];
@@ -356,32 +297,19 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     }
   };
 
-  // 5. BULK DELETE TESTS
   const deleteTests = async (section: Section, testIds: string[]) => {
       try {
           for (const testId of testIds) {
-             // 1. Get all questions
              const qColl = collection(db, 'globalTests', testId, 'questions');
              const qSnap = await getDocs(qColl);
-
-             // 2. Batch delete questions (Optimized)
-             const BATCH_SIZE = 3; // Kept small for safety as per previous request
-             const batchPromises = [];
-             
+             const BATCH_SIZE = 3; 
              for (let i = 0; i < qSnap.docs.length; i += BATCH_SIZE) {
                  const chunk = qSnap.docs.slice(i, i + BATCH_SIZE);
                  const batch = writeBatch(db);
                  chunk.forEach(doc => batch.delete(doc.ref));
-                 batchPromises.push(batch.commit());
+                 await batch.commit();
              }
-
-             // Execute batches in parallel for this test
-             await Promise.all(batchPromises);
-             
-             // 3. Delete the test document
              await deleteDoc(doc(db, 'globalTests', testId));
-
-             // Update local state
              setSubcollectionQuestions(prev => {
                 const newState = { ...prev };
                 delete newState[testId];
@@ -394,71 +322,51 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
       }
   };
   
-  // ... (rest of user data actions remain unchanged)
-    const addQuestionsToReview = (section: Section, questions: Omit<FolderQuestion, 'id'>[]) => {
-        if ((isDevUser && !isPreviewMode) || questions.length === 0) return;
-
-        saveUserSpecificData(draft => {
-            const REVIEW_TEST_MAX_QUESTIONS = 75;
-            
-            if (!draft.reviewTests) {
-                draft.reviewTests = { quantitative: [], verbal: [] };
-            }
-             if (!draft.reviewedQuestionIds) {
-                draft.reviewedQuestionIds = {};
-            }
-            
-            const reviewTestsInSection = draft.reviewTests[section];
-
-            const existingOriginalIds = new Set<string>();
-            reviewTestsInSection.forEach((test: Test) => {
-                test.questions.forEach(q => {
-                    const fq = q as FolderQuestion;
-                    if (fq.originalId) existingOriginalIds.add(fq.originalId);
-                });
-            });
-
-            const uniqueQuestionsToAdd = questions.filter(q => {
-                return q.originalId && !existingOriginalIds.has(q.originalId);
-            });
-
-            if (uniqueQuestionsToAdd.length === 0) return;
-
-            const newQuestionsWithIds = uniqueQuestionsToAdd.map(q => ({
-                ...q,
-                id: `q_review_${Date.now()}_${Math.random()}`
-            }));
-            
-            let targetTest = reviewTestsInSection.length > 0 ? reviewTestsInSection[reviewTestsInSection.length - 1] : null;
-
-            for (const questionToAdd of newQuestionsWithIds) {
-                if (!targetTest || targetTest.questions.length >= REVIEW_TEST_MAX_QUESTIONS) {
-                    const newTestNumber = reviewTestsInSection.length + 1;
-                    targetTest = {
-                        id: `review_${section}_${newTestNumber}_${Date.now()}`,
-                        name: `مراجعة ${newTestNumber}`,
-                        questions: []
-                    };
-                    draft.reviewTests[section].push(targetTest);
-                }
-                targetTest.questions.push(questionToAdd);
-                draft.reviewedQuestionIds[questionToAdd.originalId || questionToAdd.id] = true;
-            }
-        });
-    };
+  const addQuestionsToReview = (section: Section, questions: Omit<FolderQuestion, 'id'>[]) => {
+      if ((isDevUser && !isPreviewMode) || questions.length === 0) return;
+      saveUserSpecificData(draft => {
+          const REVIEW_TEST_MAX_QUESTIONS = 75;
+          if (!draft.reviewTests) draft.reviewTests = { quantitative: [], verbal: [] };
+          if (!draft.reviewedQuestionIds) draft.reviewedQuestionIds = {};
+          const reviewTestsInSection = draft.reviewTests[section];
+          const existingOriginalIds = new Set<string>();
+          reviewTestsInSection.forEach((test: Test) => {
+              test.questions.forEach(q => {
+                  const fq = q as FolderQuestion;
+                  if (fq.originalId) existingOriginalIds.add(fq.originalId);
+              });
+          });
+          const uniqueQuestionsToAdd = questions.filter(q => q.originalId && !existingOriginalIds.has(q.originalId));
+          if (uniqueQuestionsToAdd.length === 0) return;
+          const newQuestionsWithIds = uniqueQuestionsToAdd.map(q => ({
+              ...q,
+              id: `q_review_${Date.now()}_${Math.random()}`
+          }));
+          let targetTest = reviewTestsInSection.length > 0 ? reviewTestsInSection[reviewTestsInSection.length - 1] : null;
+          for (const questionToAdd of newQuestionsWithIds) {
+              if (!targetTest || targetTest.questions.length >= REVIEW_TEST_MAX_QUESTIONS) {
+                  const newTestNumber = reviewTestsInSection.length + 1;
+                  targetTest = {
+                      id: `review_${section}_${newTestNumber}_${Date.now()}`,
+                      name: `مراجعة ${newTestNumber}`,
+                      questions: []
+                  };
+                  draft.reviewTests[section].push(targetTest);
+              }
+              targetTest.questions.push(questionToAdd);
+              draft.reviewedQuestionIds[questionToAdd.originalId || questionToAdd.id] = true;
+          }
+      });
+  };
 
   const addAttemptToHistory = (attempt: Omit<TestAttempt, 'id'>) => {
     if ((isDevUser && !isPreviewMode) || attempt.testId.includes('review_')) return;
-    
     const newAttempt: TestAttempt = { ...attempt, id: `attempt_${Date.now()}` };
-    
     const questionsToReview: FolderQuestion[] = [];
     const answeredQuestions = new Map(attempt.answers.map(a => [a.questionId, a.answer]));
-
     attempt.questions.forEach((question, index) => {
         const userAnswer = answeredQuestions.get(question.id);
         const isCorrect = userAnswer && userAnswer.trim() === question.correctAnswer.trim();
-
         if (!isCorrect) {
             questionsToReview.push({
                 ...question,
@@ -476,26 +384,14 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
             });
         }
     });
-    
-    if (questionsToReview.length > 0) {
-        addQuestionsToReview(attempt.section, questionsToReview);
-    }
-
-    saveUserSpecificData(draft => {
-      draft.history.unshift(newAttempt);
-    });
+    if (questionsToReview.length > 0) addQuestionsToReview(attempt.section, questionsToReview);
+    saveUserSpecificData(draft => { draft.history.unshift(newAttempt); });
   };
 
   const createFolder = (section: Section, folderName: string): string => {
     if (isDevUser && !isPreviewMode) return '';
-    const newFolder: Folder = {
-      id: `folder_${Date.now()}`,
-      name: folderName,
-      questions: [],
-    };
-    saveUserSpecificData(draft => {
-        draft.folders[section].push(newFolder);
-    });
+    const newFolder: Folder = { id: `folder_${Date.now()}`, name: folderName, questions: [] };
+    saveUserSpecificData(draft => { draft.folders[section].push(newFolder); });
     return newFolder.id;
   };
 
@@ -517,50 +413,45 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     });
   };
   
-    const addDelayedQuestionToReview = (section: Section, question: Question, context: { bankKey?: string; categoryKey?: string, testName?: string, originalQuestionIndex?: number }) => {
-        if (isDevUser && !isPreviewMode) return;
-        
-        const questionToAdd: Omit<FolderQuestion, 'id'> = {
-            ...question,
-            originalId: question.id,
-            reviewType: 'delay',
-            addedDate: new Date().toISOString(),
-            ...context,
-            sourceBank: context.bankKey ? VERBAL_BANKS[context.bankKey] : undefined,
-            sourceSection: context.categoryKey ? VERBAL_CATEGORIES[context.categoryKey] : undefined,
-            sourceTest: context.testName,
-        };
-        addQuestionsToReview(section, [questionToAdd]);
-    };
+  const addDelayedQuestionToReview = (section: Section, question: Question, context: { bankKey?: string; categoryKey?: string, testName?: string, originalQuestionIndex?: number }) => {
+      if (isDevUser && !isPreviewMode) return;
+      const questionToAdd: Omit<FolderQuestion, 'id'> = {
+          ...question,
+          originalId: question.id,
+          reviewType: 'delay',
+          addedDate: new Date().toISOString(),
+          ...context,
+          sourceBank: context.bankKey ? VERBAL_BANKS[context.bankKey] : undefined,
+          sourceSection: context.categoryKey ? VERBAL_CATEGORIES[context.categoryKey] : undefined,
+          sourceTest: context.testName,
+      };
+      addQuestionsToReview(section, [questionToAdd]);
+  };
     
-    const addSpecialLawQuestionToReview = (section: Section, question: Question, context: { bankKey?: string; categoryKey?: string, testName?: string, originalQuestionIndex?: number }) => {
-        if (isDevUser && !isPreviewMode) return;
-        
-        const questionToAdd: Omit<FolderQuestion, 'id'> = {
-            ...question,
-            originalId: question.id,
-            reviewType: 'specialLaw',
-            addedDate: new Date().toISOString(),
-            ...context,
-            sourceBank: context.bankKey ? VERBAL_BANKS[context.bankKey] : undefined,
-            sourceSection: context.categoryKey ? VERBAL_CATEGORIES[context.categoryKey] : undefined,
-            sourceTest: context.testName,
-        };
-        addQuestionsToReview(section, [questionToAdd]);
-    };
+  const addSpecialLawQuestionToReview = (section: Section, question: Question, context: { bankKey?: string; categoryKey?: string, testName?: string, originalQuestionIndex?: number }) => {
+      if (isDevUser && !isPreviewMode) return;
+      const questionToAdd: Omit<FolderQuestion, 'id'> = {
+          ...question,
+          originalId: question.id,
+          reviewType: 'specialLaw',
+          addedDate: new Date().toISOString(),
+          ...context,
+          sourceBank: context.bankKey ? VERBAL_BANKS[context.bankKey] : undefined,
+          sourceSection: context.categoryKey ? VERBAL_CATEGORIES[context.categoryKey] : undefined,
+          sourceTest: context.testName,
+      };
+      addQuestionsToReview(section, [questionToAdd]);
+  };
     
-    const deleteUserData = async (userKey?: string) => {
-        if (!userKey) return;
-        try {
-            await deleteDoc(doc(db, 'userData', userKey));
-        } catch (e) {
-            console.error("Failed to delete user data:", e);
-        }
-    };
+  const deleteUserData = async (userKey?: string) => {
+      if (!userKey) return;
+      try {
+          await deleteDoc(doc(db, 'users', userKey));
+      } catch (e) {
+          console.error("Failed to delete user data:", e);
+      }
+  };
 
-    const exportAllData = () => { return true; }; // Stubbed out
-    const importAllData = async (file: File): Promise<boolean> => { return true; }; // Stubbed out
-  
   const reviewedQuestionIdsSet = useMemo(() => new Set(Object.keys(userData.reviewedQuestionIds || {})), [userData.reviewedQuestionIds]);
 
   return { 
@@ -581,9 +472,7 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
     deleteUserData, 
     addDelayedQuestionToReview, 
     addSpecialLawQuestionToReview, 
-    exportAllData,
-    importAllData,
     reviewedQuestionIds: reviewedQuestionIdsSet,
-    fetchTestQuestions // Exported for on-demand use
+    fetchTestQuestions 
   };
 };
