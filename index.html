@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
@@ -8,33 +9,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-    <!-- Add Tesseract.js for OCR -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
-    <!-- Add PDF.js -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
-        // Configure PDF.js worker immediately
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
     </script>
     <style>
       :root {
-        /* New Modern Theme */
-        --color-primary: #38bdf8; /* Sky 400 */
-        --color-primary-hover: #7dd3fc; /* Sky 300 */
-        --color-primary-light: #1e40af; /* Blue 800 - for selected items */
-        --color-accent: #2dd4bf; /* Teal 400 */
-        --color-accent-hover: #5eead4; /* Teal 300 */
-        --color-success: #34d399; /* Emerald 400 */
-        --color-danger: #f472b6; /* Pink 400 */
-        --color-danger-hover: #fb7185; /* Rose 400 */
-        --color-warning: #facc15; /* Yellow 400 */
-        --color-gold: #fde047; /* Yellow 300 for question text */
-        --color-text: #e2e8f0; /* Slate 200 */
-        --color-text-muted: #94a3b8; /* Slate 400 */
-        --color-bg: #18181b; /* Zinc 900 */
-        --color-surface: #27272a; /* Zinc 800 */
-        --color-border: #3f3f46; /* Zinc 700 */
-        --color-border-hover: #52525b; /* Zinc 600 */
+        --color-primary: #38bdf8; 
+        --color-primary-hover: #7dd3fc; 
+        --color-primary-light: #1e40af; 
+        --color-accent: #2dd4bf; 
+        --color-accent-hover: #5eead4; 
+        --color-success: #34d399; 
+        --color-danger: #f472b6; 
+        --color-danger-hover: #fb7185; 
+        --color-warning: #facc15; 
+        --color-gold: #fde047; 
+        --color-text: #e2e8f0; 
+        --color-text-muted: #94a3b8; 
+        --color-bg: #18181b; 
+        --color-surface: #27272a; 
+        --color-border: #3f3f46; 
+        --color-border-hover: #52525b; 
       }
       body {
         background-color: var(--color-bg);
@@ -48,7 +45,6 @@
       .focus-ring {
         --tw-ring-color: var(--color-accent) !important;
       }
-      /* Custom Scrollbar */
       html {
         scrollbar-width: thin;
         scrollbar-color: var(--color-border-hover) var(--color-surface);
@@ -78,7 +74,10 @@
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
     "process": "https://aistudiocdn.com/process@^0.11.10",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+    "firebase/app": "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/"
   }
 }
 </script>

@@ -1,3 +1,4 @@
+
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -17,7 +18,6 @@ export class RegistrationError extends Error {
   }
 }
 
-// Map Firebase User to App User
 const mapUser = (fbUser: FirebaseUser, additionalData?: any): User => ({
     uid: fbUser.uid,
     email: fbUser.email?.replace('+dev_priv', '') || '', 
@@ -40,7 +40,6 @@ const toDevEmail = (email: string): string => {
 export const authService = {
     login: async (email: string, password: string): Promise<User> => {
         try {
-            // التحقق من أن كلمة المرور ليست كلمة مرور المطور السرية لمنع التداخل
             if (password === '...') {
                 throw new Error('يرجى استخدام نموذج دخول المطور');
             }
@@ -49,15 +48,16 @@ export const authService = {
             const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
             const userData = userDoc.exists() ? userDoc.data() : {};
 
-            // تحديث سجل النشاط
             const now = new Date().toISOString();
-            updateDoc(doc(db, 'users', cred.user.uid), {
-                loginHistory: arrayUnion({
-                    loginTime: now,
-                    logoutTime: null,
-                    lastActive: now 
-                } as LoginRecord)
-            }).catch(() => {});
+            if (navigator.onLine) {
+                updateDoc(doc(db, 'users', cred.user.uid), {
+                    loginHistory: arrayUnion({
+                        loginTime: now,
+                        logoutTime: null,
+                        lastActive: now 
+                    } as LoginRecord)
+                }).catch(() => {});
+            }
 
             return mapUser(cred.user, userData);
         } catch (error: any) {
@@ -82,7 +82,6 @@ export const authService = {
         
         try {
             const targetEmail = toDevEmail(emailToUse);
-            // تسجيل الدخول بكلمة المرور الثابتة الخاصة بالمطورين
             const cred = await signInWithEmailAndPassword(auth, targetEmail, DEV_SECURE_PASSWORD);
             
             let devData = { isDeveloper: true };
@@ -98,13 +97,15 @@ export const authService = {
             localStorage.setItem(DEV_EMAIL_KEY, emailToUse);
 
             const now = new Date().toISOString();
-            updateDoc(doc(db, 'users', cred.user.uid), {
-                loginHistory: arrayUnion({
-                    loginTime: now,
-                    logoutTime: null,
-                    lastActive: now
-                } as LoginRecord)
-            }).catch(() => {});
+            if (navigator.onLine) {
+                updateDoc(doc(db, 'users', cred.user.uid), {
+                    loginHistory: arrayUnion({
+                        loginTime: now,
+                        logoutTime: null,
+                        lastActive: now
+                    } as LoginRecord)
+                }).catch(() => {});
+            }
 
             return mapUser(cred.user, devData);
 
@@ -132,7 +133,7 @@ export const authService = {
             const newUser = {
                 username,
                 email,
-                password, // يتم حفظها في Firestore للمعاينة من قبل الإدارة فقط
+                password, 
                 isDeveloper: false,
                 registrationDate: new Date().toISOString(),
                 loginHistory: []
@@ -178,6 +179,7 @@ export const authService = {
     },
     
     sendHeartbeat: async (uid: string) => {
+        if (!navigator.onLine) return; 
         try {
             const userRef = doc(db, 'users', uid);
             const userDoc = await getDoc(userRef);
@@ -195,13 +197,15 @@ export const authService = {
                 }
             }
         } catch (e: any) {
-            if (e.code !== 'permission-denied') console.error("Heartbeat error:", e);
+            if (e.code !== 'permission-denied' && e.message !== 'Failed to get document because the client is offline.') {
+                console.error("Heartbeat error:", e);
+            }
         }
     },
 
     logout: async () => {
         const currentUser = auth.currentUser;
-        if (currentUser) {
+        if (currentUser && navigator.onLine) {
             try {
                 const userRef = doc(db, 'users', currentUser.uid);
                 const userDoc = await getDoc(userRef);
@@ -243,7 +247,6 @@ export const authService = {
                      if (userData) {
                          callback(mapUser(fbUser, userData));
                      } else {
-                         // في حال عدم وجود وثيقة في Firestore، ننشئ مستخدم افتراضي
                          const newUser = {
                              username: fbUser.displayName || 'User',
                              email: fbUser.email?.replace('+dev_priv', '') || '',
