@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Question, Section } from '../types';
 
@@ -25,8 +26,8 @@ interface ProcessorConfig {
 }
 
 export const useQuantitativeProcessor = (
-    onAddTest: (section: Section, testName: string, bankKey: string, categoryKey: string, sourceText: string) => string,
-    onAddQuestionsToTest: (section: Section, testId: string, questions: Omit<Question, 'id'>[]) => void
+    onAddTest: (section: Section, testName: string, bankKey: string, categoryKey: string, sourceText: string) => Promise<string>,
+    onAddQuestionsToTest: (section: Section, testId: string, questions: Omit<Question, 'id'>[]) => Promise<void>
 ) => {
     const [queue, setQueue] = useState<ProcessItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -60,14 +61,17 @@ export const useQuantitativeProcessor = (
             const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
             
             const testName = nextItem.fileName.replace(/\.pdf$/i, '').split('-')[0].trim();
-            const testId = onAddTest('quantitative', testName, '', '', `ملف مصدري: ${nextItem.fileName}`);
+            
+            // هام جداً: انتظار إنشاء الاختبار والحصول على معرفه الحقيقي
+            const testId = await onAddTest('quantitative', testName, '', '', `ملف مصدري مستخرج: ${nextItem.fileName}`);
+
+            if (!testId) throw new Error("Failed to create test reference");
 
             const questionsToAdd: Omit<Question, 'id'>[] = [];
-            const startPage = 2;
+            const startPage = 2; // تخطي الغلاف
 
             for (let pageNum = startPage; pageNum <= pdf.numPages; pageNum++) {
                 const page = await pdf.getPage(pageNum);
-                // استخدام مقياس 2.0 لمطابقة إحداثيات المعاينة بدقة
                 const viewport = page.getViewport({ scale: 2.0 }); 
                 
                 const canvas = document.createElement('canvas');
@@ -76,7 +80,7 @@ export const useQuantitativeProcessor = (
                 canvas.height = viewport.height;
                 await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-                // قص منطقة السؤال بدقة متناهية وفق التحديد
+                // قص منطقة السؤال
                 const qCanvas = document.createElement('canvas');
                 qCanvas.width = currentConfig.questionBox.width;
                 qCanvas.height = currentConfig.questionBox.height;
@@ -88,7 +92,7 @@ export const useQuantitativeProcessor = (
                     currentConfig.questionBox.width, currentConfig.questionBox.height
                 );
                 
-                // قص منطقة الإجابة بدقة متناهية وفق التحديد
+                // قص منطقة الإجابة
                 const aCanvas = document.createElement('canvas');
                 aCanvas.width = currentConfig.answerBox.width;
                 aCanvas.height = currentConfig.answerBox.height;
@@ -107,8 +111,8 @@ export const useQuantitativeProcessor = (
                 } catch (e) {}
 
                 questionsToAdd.push({
-                    questionText: `سؤال رقم ${pageNum - 1}`,
-                    questionImage: qCanvas.toDataURL('image/webp', 0.75), 
+                    questionText: `سؤال مستخرج من صفحة ${pageNum}`,
+                    questionImage: qCanvas.toDataURL('image/webp', 0.8), 
                     verificationImage: aCanvas.toDataURL('image/webp', 0.6),
                     options: ['أ', 'ب', 'ج', 'د'],
                     correctAnswer: autoAnswer,
@@ -120,11 +124,17 @@ export const useQuantitativeProcessor = (
             }
 
             if (questionsToAdd.length > 0) {
-                onAddQuestionsToTest('quantitative', testId, questionsToAdd);
+                // انتظار اكتمال رفع جميع الأسئلة قبل تعليم المهمة كمكتملة
+                await onAddQuestionsToTest('quantitative', testId, questionsToAdd);
             }
 
             setQueue(prev => prev.map(item => item.id === nextItem.id ? { ...item, status: 'completed', progress: 100 } : item));
+            
+            // نجاح المعالجة يقتضي تحديث واجهة المستخدم فوراً
+            console.log(`Successfully processed ${questionsToAdd.length} questions for test ${testId}`);
+
         } catch (error) {
+            console.error("Processing error:", error);
             setQueue(prev => prev.map(item => item.id === nextItem.id ? { ...item, status: 'error' } : item));
         } finally {
             processingRef.current = false;
