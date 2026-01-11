@@ -138,54 +138,31 @@ export const useAppData = (userId: string | null, isDevUser: boolean, isPreviewM
 
   const deleteTests = async (section: Section, testIds: string[]) => {
       if (!isDevUser || testIds.length === 0) return;
-      
       try {
-          // استخدام Batch لتنفيذ عمليات الحذف بكفاءة
-          for (const testId of testIds) {
-              // 1. جلب كل الأسئلة التابعة لهذا الاختبار
-              const questionsRef = collection(db, 'globalTests', testId, 'questions');
+          for (const id of testIds) {
+              const questionsRef = collection(db, 'globalTests', id, 'questions');
               const qSnap = await getDocs(questionsRef);
-              
               const batch = writeBatch(db);
               
-              // 2. إضافة عمليات حذف الأسئلة للـ Batch
-              qSnap.forEach((questionDoc) => {
-                  batch.delete(questionDoc.ref);
-              });
+              // حذف جميع مستندات الأسئلة في المجموعة الفرعية أولاً
+              qSnap.forEach(d => batch.delete(d.ref));
               
-              // 3. إضافة عملية حذف الاختبار نفسه للـ Batch
-              batch.delete(doc(db, 'globalTests', testId));
+              // حذف مستند الاختبار الأساسي
+              batch.delete(doc(db, 'globalTests', id));
               
-              // 4. تنفيذ الحذف
               await batch.commit();
               
-              // 5. تنظيف الذاكرة المحلية فوراً لضمان اختفاء الاختبار من الشاشة
+              // تنظيف الحالة المحلية فوراً
               setSubcollectionQuestions(prev => {
                   const next = { ...prev };
-                  delete next[testId];
+                  delete next[id];
                   return next;
               });
           }
-          
-          // تأكيد الحذف في الذاكرة المحلية للهيكل العام
-          setGlobalTests(prev => {
-              const next = { ...prev };
-              if (section === 'quantitative') {
-                  next.quantitative = next.quantitative.filter(t => !testIds.includes(t.id));
-              } else {
-                  // للقسم اللفظي، نحتاج للمرور عبر البنوك والأقسام
-                  Object.keys(next.verbal).forEach(bank => {
-                      Object.keys(next.verbal[bank]).forEach(cat => {
-                          next.verbal[bank][cat] = next.verbal[bank][cat].filter(t => !testIds.includes(t.id));
-                      });
-                  });
-              }
-              return next;
-          });
-
+          console.log(`Successfully deleted ${testIds.length} tests.`);
       } catch (error) {
-          console.error("Critical Error in deleteTests:", error);
-          alert("حدث خطأ أثناء محاولة الحذف من قاعدة البيانات. تأكد من صلاحيات المطور.");
+          console.error("Error in deleteTests:", error);
+          throw error;
       }
   };
 
